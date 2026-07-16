@@ -1,80 +1,56 @@
 (function () {
-  document.getElementById("siteTitle").textContent = CONFIG.siteTitle;
-  document.getElementById("siteSubtitle").textContent = CONFIG.siteSubtitle;
-  document.getElementById("caseTag").textContent = "CASE " + CONFIG.caseNumber;
-  document.title = `${CONFIG.siteTitle} Sightings — nard.lol`;
+  document.getElementById("photo").src = CONFIG.photo;
+  document.getElementById("crimeText").textContent = "FOR " + CONFIG.crime;
+  document.getElementById("nameText").textContent = CONFIG.name;
+  document.getElementById("rewardText").textContent = CONFIG.reward + " REWARD";
+  document.getElementById("cautionText").textContent = CONFIG.caution;
+  document.title = "WANTED — " + CONFIG.name;
 
-  const els = {
-    panelEmpty: document.getElementById("panelEmpty"),
-    panelReport: document.getElementById("panelReport"),
-    panelCount: document.getElementById("panelCount"),
-    reportTag: document.getElementById("reportTag"),
-    reportTitle: document.getElementById("reportTitle"),
-    reportDate: document.getElementById("reportDate"),
-    reportLocation: document.getElementById("reportLocation"),
-    reportPhotoWrap: document.getElementById("reportPhotoWrap"),
-    reportPhoto: document.getElementById("reportPhoto"),
-    reportBody: document.getElementById("reportBody"),
-    reportClose: document.getElementById("reportClose"),
-  };
+  const stage = document.getElementById("posterStage");
+  const poster = document.getElementById("poster");
+  const dust = document.getElementById("dustLayer");
+  const scene = document.getElementById("scene");
 
-  els.panelCount.textContent = `${CONFIG.sightings.length} sighting${CONFIG.sightings.length === 1 ? "" : "s"} on record`;
+  let targetX = 0, targetY = 0; // -1 to 1
+  let curX = 0, curY = 0;
 
-  function showReport(s) {
-    els.reportTag.textContent = s.tag || "SIGHTING";
-    els.reportTitle.textContent = s.title;
-    els.reportDate.textContent = s.date || "";
-    els.reportLocation.textContent = s.location || "";
-    els.reportBody.textContent = s.report;
+  function applyTilt() {
+    // smooth easing toward target
+    curX += (targetX - curX) * 0.08;
+    curY += (targetY - curY) * 0.08;
 
-    if (s.image) {
-      els.reportPhoto.src = s.image;
-      els.reportPhoto.alt = s.title;
-      els.reportPhotoWrap.hidden = false;
-    } else {
-      els.reportPhotoWrap.hidden = true;
-    }
+    const rotY = curX * 14;   // left-right tilt
+    const rotX = -curY * 14;  // up-down tilt
 
-    els.panelEmpty.hidden = true;
-    els.panelReport.hidden = false;
+    poster.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+    dust.style.transform = `translate(${curX * -30}px, ${curY * -20}px)`;
+
+    requestAnimationFrame(applyTilt);
   }
 
-  function showEmpty() {
-    els.panelReport.hidden = true;
-    els.panelEmpty.hidden = false;
+  function handlePointer(clientX, clientY) {
+    const rect = scene.getBoundingClientRect();
+    const x = (clientX - rect.left) / rect.width;  // 0 to 1
+    const y = (clientY - rect.top) / rect.height;
+    targetX = (x - 0.5) * 2;
+    targetY = (y - 0.5) * 2;
   }
 
-  els.reportClose.addEventListener("click", showEmpty);
-
-  // ── Map setup ────────────────────────────────────────────────────────
-  const map = L.map("map", { zoomControl: true }).setView(
-    [CONFIG.mapCenter.lat, CONFIG.mapCenter.lng],
-    CONFIG.mapZoom
-  );
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap contributors",
-    maxZoom: 19,
-  }).addTo(map);
-
-  const nardIcon = L.divIcon({
-    className: "",
-    html: '<div class="nard-pin"><span>👁️</span></div>',
-    iconSize: [34, 34],
-    iconAnchor: [17, 34],
-    popupAnchor: [0, -30],
+  window.addEventListener("pointermove", (e) => {
+    handlePointer(e.clientX, e.clientY);
   });
 
-  const markers = [];
-  CONFIG.sightings.forEach((s) => {
-    const marker = L.marker([s.lat, s.lng], { icon: nardIcon }).addTo(map);
-    marker.bindPopup(`<strong>${s.title}</strong><br>${s.location || ""}`);
-    marker.on("click", () => showReport(s));
-    markers.push(marker);
+  window.addEventListener("pointerleave", () => {
+    targetX = 0;
+    targetY = 0;
   });
 
-  if (markers.length > 1) {
-    const group = L.featureGroup(markers);
-    map.fitBounds(group.getBounds().pad(0.3));
-  }
+  // gentle device-tilt parallax on mobile, if permission isn't gated
+  window.addEventListener("deviceorientation", (e) => {
+    if (e.gamma == null || e.beta == null) return;
+    targetX = Math.max(-1, Math.min(1, e.gamma / 30));
+    targetY = Math.max(-1, Math.min(1, (e.beta - 45) / 30));
+  });
+
+  requestAnimationFrame(applyTilt);
 })();
