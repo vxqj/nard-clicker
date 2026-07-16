@@ -3,54 +3,53 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Big Nard</title>
+<title>WANTED — Big Nard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Mono:wght@400;700&family=Work+Sans:wght@400;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link href="https://fonts.googleapis.com/css2?family=Rye&family=Special+Elite&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <header class="topbar">
-    <div class="topbar-inner">
-      <span class="case-tag" id="caseTag">CASE NL-0930</span>
-      <h1 class="brand" id="siteTitle">BIG NARD</h1>
-      <span class="case-tag" id="siteSubtitle">Confirmed Sightings & Field Reports</span>
+  <!-- SVG filter used to rough up the poster edges -->
+  <svg width="0" height="0" style="position:absolute">
+    <filter id="roughEdge" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.06" numOctaves="3" seed="7" result="noise" />
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="18" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+    <filter id="roughEdgeSoft" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02 0.08" numOctaves="2" seed="3" result="noise2" />
+      <feDisplacementMap in="SourceGraphic" in2="noise2" scale="10" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+  </svg>
+
+  <div class="scene" id="scene">
+    <div class="wall"></div>
+    <div class="dust" id="dustLayer"></div>
+
+    <div class="poster-stage" id="posterStage">
+      <div class="poster" id="poster">
+        <div class="paper-tex"></div>
+
+        <div class="content">
+          <h1 class="wanted">WANTED</h1>
+          <p class="crime" id="crimeText">FOR CRIMES</p>
+
+          <div class="photo-frame">
+            <img id="photo" src="" alt="Big Nard" draggable="false" />
+          </div>
+
+          <h2 class="name" id="nameText">BIG NARD</h2>
+          <p class="reward" id="rewardText">$15,000 REWARD</p>
+          <p class="caution" id="cautionText">approach with caution</p>
+        </div>
+
+        <div class="nail nail-tl"></div>
+        <div class="nail nail-tr"></div>
+      </div>
     </div>
-  </header>
+  </div>
 
-  <main class="layout">
-    <div id="map"></div>
-
-    <aside class="panel" id="panel">
-      <div class="panel-empty" id="panelEmpty">
-        <span class="panel-empty-icon">📍</span>
-        <p>Tap a marker on the map to pull up its field report.</p>
-        <p class="panel-count" id="panelCount"></p>
-      </div>
-
-      <div class="panel-report" id="panelReport" hidden>
-        <span class="report-tag" id="reportTag">TAG</span>
-        <h2 class="report-title" id="reportTitle">Title</h2>
-        <div class="report-meta">
-          <span id="reportDate"></span>
-          <span id="reportLocation"></span>
-        </div>
-        <div class="report-photo" id="reportPhotoWrap" hidden>
-          <img id="reportPhoto" src="" alt="" />
-        </div>
-        <p class="report-body" id="reportBody"></p>
-        <button class="report-close" id="reportClose">← Back to map</button>
-      </div>
-    </aside>
-  </main>
-
-  <footer class="foot">
-    <span>nard.lol — sightings logged and verified by absolutely no one official</span>
-  </footer>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js"></script>
   <script src="script.js"></script>
 </body>
