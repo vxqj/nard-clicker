@@ -3,34 +3,78 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Big Nard Clicker</title>
+<title>Big Nard Clicker — nard.lol</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Mono:wght@400;700&family=Work+Sans:wght@400;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <div class="bg-glow"></div>
+  <div class="grain"></div>
+  <div class="contour"></div>
+  <div id="shakeLayer" class="shake-layer">
 
-  <main class="wrap">
-    <p class="eyebrow">nard.lol presents</p>
-    <h1 class="title" id="title">Big Nard Clicker</h1>
-    <p class="subtitle" id="subtitle">Click Mitchell. Together, as one people.</p>
+    <header class="topbar">
+      <span class="case-tag">CASE NL-0930</span>
+      <span class="case-tag case-tag-right">SUPPLEMENTARY FILE · CLICKER MODULE</span>
+    </header>
 
-    <div class="count-shell">
-      <div class="count" id="count">0</div>
-      <div class="count-label">global clicks</div>
-    </div>
+    <main class="wrap">
 
-    <button class="face-btn" id="faceBtn" aria-label="Click Mitchell's face">
-      <img id="faceImg" src="" alt="Mitchell" draggable="false" />
-      <div class="placeholder" id="placeholder">
-        <span>Add face images in <code>config.js</code></span>
+      <div class="masthead">
+        <p class="kicker">nard.lol presents, against our better judgement</p>
+        <h1 class="title">
+          <span class="title-line">BIG NARD</span>
+          <span class="title-line title-accent">CLICKER</span>
+        </h1>
+        <p class="subtitle">Tap the man. The tally is shared by everyone who visits. Act accordingly.</p>
       </div>
-    </button>
 
-    <p class="hint">click count updates live for everyone, everywhere</p>
+      <div class="stage">
 
-    <div id="popLayer" class="pop-layer"></div>
-  </main>
+        <div class="tally-plate">
+          <span class="tally-label">Total Recorded Clicks</span>
+          <div class="tally-number" id="count">0</div>
+          <span class="tally-sub" id="tallySub">first click of the day, probably</span>
+        </div>
+
+        <div class="photo-rig">
+          <div class="corkboard-patch"></div>
+          <button class="face-btn" id="faceBtn" aria-label="Click Mitchell's face">
+            <div class="pin"></div>
+            <div class="photo-frame">
+              <img id="faceImg" src="" alt="Mitchell" draggable="false" />
+              <div class="placeholder" id="placeholder">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                  <rect x="3" y="3" width="18" height="18" rx="1" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="M21 15l-5-5L5 21" />
+                </svg>
+                <span>Photos not loaded — check config.js</span>
+              </div>
+            </div>
+            <span class="tape tape-tl"></span>
+            <span class="tape tape-br"></span>
+          </button>
+          <p class="photo-caption">EXHIBIT M — “MITCHELL,” HANDLE WITH SOME CARE</p>
+        </div>
+
+      </div>
+
+      <p class="hint">click count syncs live across every device watching this page</p>
+
+    </main>
+
+    <footer class="foot">
+      <span>nard.lol / NL-0930</span>
+      <span>status: ongoing</span>
+    </footer>
+
+  </div>
+
+  <div id="popLayer" class="pop-layer"></div>
+  <div id="milestoneLayer" class="milestone-layer"></div>
 
   <script src="config.js"></script>
   <script src="script.js"></script>
