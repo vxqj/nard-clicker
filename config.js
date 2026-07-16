@@ -11,16 +11,15 @@
 //    something unique below, you don't need to change it.
 //
 // Want to change the title/subtitle text? That lives directly in
-// index.html now (search for "masthead") since it's no longer plain
-// centered text — it's part of the layout.
+// index.html now (search for "masthead") since it's part of the layout.
 // ─────────────────────────────────────────────────────────────────────────
 
 const CONFIG = {
   // Face shown normally / after the click animation finishes
-  seriousFace: "https://ibb.co/hzg7zbH",
+  seriousFace: "https://i.ibb.co/XRW2R1p/Chat-GPT-Image-Jul-16-2026-12-07-01-PM-removebg-preview.png",
 
   // Face shown briefly the instant you click
-  tongueOutFace: "https://ibb.co/jk032q9F",
+  tongueOutFace: "https://i.ibb.co/yFvg1KmJ/Pix-Verse-Image-Effect-prompt-Make-me-stick-my-removebg-preview.png",
 
   // How long the tongue-out face stays up before flipping back, in ms
   faceSwapDurationMs: 220,
