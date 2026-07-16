@@ -23,6 +23,7 @@
 
   let displayedCount = 0;
   let swapTimeout = null;
+  let clickLocked = false;
   const seenMilestones = new Set();
 
   const subLines = [
@@ -123,6 +124,10 @@
   }
 
   function handleClick(e) {
+    if (clickLocked) return;
+    clickLocked = true;
+    setTimeout(() => { clickLocked = false; }, CONFIG.clickCooldownMs);
+
     playFaceSwap();
     bumpCountAnim();
 
