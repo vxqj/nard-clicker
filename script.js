@@ -1,15 +1,17 @@
 (function () {
   const COUNT_API_BASE = "https://countapi.mileshilliard.com/api/v1";
-  const MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+  const MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000];
+  const POP_COLORS = ["#ff6b1f", "#ffc93c", "#ff9142", "#ff3b3b"];
 
   const els = {
     count: document.getElementById("count"),
-    tallySub: document.getElementById("tallySub"),
+    cps: document.getElementById("cps"),
+    streak: document.getElementById("streak"),
     faceBtn: document.getElementById("faceBtn"),
     faceImg: document.getElementById("faceImg"),
     popLayer: document.getElementById("popLayer"),
     milestoneLayer: document.getElementById("milestoneLayer"),
-    shakeLayer: document.getElementById("shakeLayer"),
+    flash: document.getElementById("flash"),
   };
 
   const hasImages = Boolean(CONFIG.seriousFace && CONFIG.tongueOutFace);
@@ -23,62 +25,79 @@
 
   let displayedCount = 0;
   let swapTimeout = null;
-  let clickLocked = false;
   const seenMilestones = new Set();
+  const clickTimes = [];
+  let streak = 0;
+  let lastClickAt = 0;
 
-  const subLines = [
-    "the tally never lies",
-    "he can feel it, somehow",
-    "recorded for posterity",
-    "this is fine, apparently",
-    "case remains open",
-  ];
+  function setCountIfHigher(n) {
+    if (n > displayedCount) {
+      displayedCount = n;
+      els.count.textContent = n.toLocaleString();
+      checkMilestones(n);
+    }
+  }
 
-  function setCount(n) {
-    const prev = displayedCount;
-    displayedCount = n;
-    els.count.textContent = n.toLocaleString();
-    if (n > prev) checkMilestones(n);
+  function incrementLocal() {
+    displayedCount += 1;
+    els.count.textContent = displayedCount.toLocaleString();
+    checkMilestones(displayedCount);
   }
 
   function bumpCountAnim() {
     els.count.classList.remove("bump");
     void els.count.offsetWidth;
     els.count.classList.add("bump");
-    els.tallySub.textContent = subLines[Math.floor(Math.random() * subLines.length)];
+  }
+
+  function updateRateStats(now) {
+    clickTimes.push(now);
+    while (clickTimes.length && now - clickTimes[0] > 1000) clickTimes.shift();
+    els.cps.textContent = clickTimes.length;
+
+    if (now - lastClickAt < 700) {
+      streak += 1;
+    } else {
+      streak = 1;
+    }
+    lastClickAt = now;
+    els.streak.textContent = streak;
   }
 
   function spawnPop(x, y) {
-    const n = 2 + Math.floor(Math.random() * 2); // 2-3 particles
+    const n = 2 + Math.floor(Math.random() * 3); // 2-4 particles
     for (let i = 0; i < n; i++) {
       const pop = document.createElement("div");
       pop.className = "pop";
       pop.textContent = "+1";
-      const dx = (Math.random() - 0.5) * 90;
-      const rot = (Math.random() - 0.5) * 20;
+      const dx = (Math.random() - 0.5) * 120;
+      const rot = (Math.random() - 0.5) * 30;
+      const size = 16 + Math.random() * 12;
       pop.style.left = x + "px";
       pop.style.top = y + "px";
+      pop.style.fontSize = size + "px";
+      pop.style.color = POP_COLORS[Math.floor(Math.random() * POP_COLORS.length)];
       pop.style.setProperty("--dx", dx + "px");
       pop.style.setProperty("--rot", rot + "deg");
-      pop.style.animationDelay = i * 40 + "ms";
+      pop.style.animationDelay = i * 30 + "ms";
       els.popLayer.appendChild(pop);
-      setTimeout(() => pop.remove(), 1000);
+      setTimeout(() => pop.remove(), 900);
     }
   }
 
-  function shakeScreen() {
-    els.shakeLayer.classList.remove("shaking");
-    void els.shakeLayer.offsetWidth;
-    els.shakeLayer.classList.add("shaking");
+  function flashScreen() {
+    els.flash.classList.remove("go");
+    void els.flash.offsetWidth;
+    els.flash.classList.add("go");
   }
 
   function showMilestone(n) {
     const toast = document.createElement("div");
     toast.className = "milestone-toast";
-    toast.textContent = `MILESTONE — ${n.toLocaleString()} CLICKS`;
+    toast.textContent = `${n.toLocaleString()} CLICKS 🔥`;
     els.milestoneLayer.appendChild(toast);
-    setTimeout(() => toast.remove(), 3100);
-    shakeScreen();
+    setTimeout(() => toast.remove(), 2900);
+    flashScreen();
   }
 
   function checkMilestones(n) {
@@ -102,41 +121,39 @@
   async function fetchCount() {
     try {
       const res = await fetch(`${COUNT_API_BASE}/get/${CONFIG.counterKey}`);
-      if (res.status === 404) { setCount(0); return; }
+      if (res.status === 404) return;
       const data = await res.json();
-      if (typeof data.value === "number" && data.value > displayedCount) {
-        setCount(data.value);
-      } else if (typeof data.value === "number") {
-        displayedCount = data.value;
-      }
+      if (typeof data.value === "number") setCountIfHigher(data.value);
     } catch (e) { /* ignore, retry next poll */ }
   }
 
-  async function hitCount() {
-    try {
-      const res = await fetch(`${COUNT_API_BASE}/hit/${CONFIG.counterKey}`);
-      const data = await res.json();
-      const value = Number(data.value);
-      if (!Number.isNaN(value)) setCount(value);
-    } catch (e) {
-      setCount(displayedCount + 1);
-    }
+  function hitCount() {
+    // fire-and-forget: UI already updated optimistically, this just
+    // syncs the shared total in the background without blocking anything
+    fetch(`${COUNT_API_BASE}/hit/${CONFIG.counterKey}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const value = Number(data.value);
+        if (!Number.isNaN(value)) setCountIfHigher(value);
+      })
+      .catch(() => { /* local optimistic count already stands, fine as-is */ });
   }
 
   function handleClick(e) {
-    if (clickLocked) return;
-    clickLocked = true;
-    setTimeout(() => { clickLocked = false; }, CONFIG.clickCooldownMs);
+    const now = performance.now();
 
     playFaceSwap();
+    incrementLocal();
     bumpCountAnim();
+    updateRateStats(now);
 
     els.faceBtn.classList.add("pressed");
-    setTimeout(() => els.faceBtn.classList.remove("pressed"), 120);
+    setTimeout(() => els.faceBtn.classList.remove("pressed"), 90);
 
-    const x = e.clientX || (els.faceBtn.getBoundingClientRect().left + 100);
-    const y = e.clientY || (els.faceBtn.getBoundingClientRect().top + 20);
-    spawnPop(x, y - 10);
+    const rect = els.faceBtn.getBoundingClientRect();
+    const x = e.clientX || (rect.left + rect.width / 2);
+    const y = e.clientY || (rect.top + rect.height / 2);
+    spawnPop(x, y);
 
     hitCount();
   }
