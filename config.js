@@ -17,10 +17,10 @@
 
 const CONFIG = {
   // Face shown normally / after the click animation finishes
-  seriousFace: "",
+  seriousFace: "https://ibb.co/hzg7zbH",
 
   // Face shown briefly the instant you click
-  tongueOutFace: "",
+  tongueOutFace: "https://ibb.co/jk032q9F",
 
   // How long the tongue-out face stays up before flipping back, in ms
   faceSwapDurationMs: 220,
