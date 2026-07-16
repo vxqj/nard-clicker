@@ -24,6 +24,10 @@ const CONFIG = {
   // How long the tongue-out face stays up before flipping back, in ms
   faceSwapDurationMs: 220,
 
+  // Minimum time between registered clicks, in ms — stops rapid spam-clicks
+  // from firing faster than the animation can keep up with
+  clickCooldownMs: 260,
+
   // Unique key for the global counter (don't need to touch this)
   counterKey: "nardlol-bignard-global-clicker-v1",
 
