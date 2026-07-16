@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Big Nard Clicker</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="bg-glow"></div>
+
+  <main class="wrap">
+    <p class="eyebrow">nard.lol presents</p>
+    <h1 class="title" id="title">Big Nard Clicker</h1>
+    <p class="subtitle" id="subtitle">Click Mitchell. Together, as one people.</p>
+
+    <div class="count-shell">
+      <div class="count" id="count">0</div>
+      <div class="count-label">global clicks</div>
+    </div>
+
+    <button class="face-btn" id="faceBtn" aria-label="Click Mitchell's face">
+      <img id="faceImg" src="" alt="Mitchell" draggable="false" />
+      <div class="placeholder" id="placeholder">
+        <span>Add face images in <code>config.js</code></span>
+      </div>
+    </button>
+
+    <p class="hint">click count updates live for everyone, everywhere</p>
+
+    <div id="popLayer" class="pop-layer"></div>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
