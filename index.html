@@ -11,65 +11,42 @@
 </head>
 <body>
 
-  <div class="grain"></div>
-  <div class="contour"></div>
-  <div id="shakeLayer" class="shake-layer">
+  <div class="glow-a"></div>
+  <div class="glow-b"></div>
 
-    <header class="topbar">
-      <span class="case-tag">NARD.LOL / NL-0930</span>
-    </header>
+  <main class="wrap">
 
-    <main class="wrap">
+    <p class="kicker">NARD.LOL</p>
+    <h1 class="title">BIG NARD CLICKER</h1>
 
-      <div class="masthead">
-        <p class="kicker">nard.lol presents, against our better judgement</p>
-        <h1 class="title">
-          <span class="title-line">BIG NARD</span>
-          <span class="title-line title-accent">CLICKER</span>
-        </h1>
-        <p class="subtitle">Tap the man. The tally is shared by everyone who visits. Act accordingly.</p>
-      </div>
+    <div class="counter-block">
+      <div class="count" id="count">0</div>
+      <div class="count-label">CLICKS</div>
+    </div>
 
-      <div class="stage">
+    <div class="cps-row">
+      <span id="cps">0</span> clicks/sec &nbsp;·&nbsp; streak <span id="streak">0</span>
+    </div>
 
-        <div class="tally-plate">
-          <span class="tally-label">Total Recorded Clicks</span>
-          <div class="tally-number" id="count">0</div>
-          <span class="tally-sub" id="tallySub">first click of the day, probably</span>
+    <div class="click-zone">
+      <div class="ring ring-1"></div>
+      <div class="ring ring-2"></div>
+      <button class="face-btn" id="faceBtn" aria-label="Click Mitchell's face">
+        <img id="faceImg" src="" alt="Mitchell" draggable="false" />
+        <div class="placeholder" id="placeholder">
+          <span>👆</span>
+          <span>CLICK</span>
         </div>
+      </button>
+    </div>
 
-        <div class="photo-rig">
-          <button class="face-btn" id="faceBtn" aria-label="Click Mitchell's face">
-            <div class="pin"></div>
-            <div class="photo-frame">
-              <img id="faceImg" src="" alt="Mitchell" draggable="false" />
-              <div class="placeholder" id="placeholder">
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
-                  <rect x="3" y="3" width="18" height="18" rx="1" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <path d="M21 15l-5-5L5 21" />
-                </svg>
-                <span>Photos not loaded — check config.js</span>
-              </div>
-            </div>
-          </button>
-          <p class="photo-caption">TAP MITCHELL</p>
-        </div>
+    <p class="hint">tap as fast as you want — every click counts live, for everyone</p>
 
-      </div>
-
-      <p class="hint">click count syncs live across every device watching this page</p>
-
-    </main>
-
-    <footer class="foot">
-      <span>status: ongoing</span>
-    </footer>
-
-  </div>
+  </main>
 
   <div id="popLayer" class="pop-layer"></div>
   <div id="milestoneLayer" class="milestone-layer"></div>
+  <div id="flash" class="flash"></div>
 
   <script src="config.js"></script>
   <script src="script.js"></script>
