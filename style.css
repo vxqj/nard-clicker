@@ -33,9 +33,9 @@ html, body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0.3;
   mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
 }
 
 .contour {
@@ -43,9 +43,9 @@ html, body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  opacity: 0.5;
   background-image:
-    repeating-radial-gradient(circle at 15% 20%, transparent 0px, transparent 38px, rgba(237,230,214,0.045) 39px, rgba(237,230,214,0.045) 40px),
-    repeating-radial-gradient(circle at 85% 75%, transparent 0px, transparent 46px, rgba(237,230,214,0.035) 47px, rgba(237,230,214,0.035) 48px);
+    repeating-radial-gradient(circle at 15% 20%, transparent 0px, transparent 38px, rgba(237,230,214,0.045) 39px, rgba(237,230,214,0.045) 40px);
 }
 
 .shake-layer {
@@ -69,11 +69,7 @@ html, body {
 }
 
 .topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 18px clamp(16px, 5vw, 40px);
-  border-bottom: 1px solid rgba(237,230,214,0.12);
 }
 
 .case-tag {
@@ -82,9 +78,8 @@ html, body {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--parchment-dim);
+  opacity: 0.7;
 }
-
-.case-tag-right { color: var(--warn); }
 
 .wrap {
   flex: 1;
@@ -148,19 +143,9 @@ html, body {
 }
 
 .tally-plate {
-  border: 1.5px dashed rgba(237,230,214,0.28);
-  padding: 22px 26px;
-  text-align: center;
-  position: relative;
-  background: rgba(30, 48, 36, 0.35);
-}
-
-.tally-plate::before {
-  content: "";
-  position: absolute;
-  top: -1px; left: -1px; right: -1px; bottom: -1px;
-  border: 1px solid rgba(214,90,31,0.15);
-  pointer-events: none;
+  border-left: 3px solid var(--blaze);
+  padding: 4px 0 4px 22px;
+  text-align: left;
 }
 
 .tally-label {
@@ -200,18 +185,6 @@ html, body {
   position: relative;
 }
 
-.corkboard-patch {
-  position: absolute;
-  width: 230px;
-  height: 230px;
-  background: var(--bark);
-  transform: rotate(3deg);
-  top: 4px;
-  z-index: 0;
-  opacity: 0.55;
-  box-shadow: inset 0 0 40px rgba(0,0,0,0.4);
-}
-
 .face-btn {
   position: relative;
   z-index: 1;
@@ -248,17 +221,6 @@ html, body {
   box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset -2px -2px 3px rgba(0,0,0,0.25);
   z-index: 2;
 }
-
-.tape {
-  position: absolute;
-  width: 46px;
-  height: 18px;
-  background: rgba(232, 185, 35, 0.55);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-}
-
-.tape-tl { top: -8px; left: -10px; transform: rotate(-40deg); }
-.tape-br { bottom: 20px; right: -10px; transform: rotate(-40deg); }
 
 .photo-frame {
   position: relative;
@@ -321,8 +283,6 @@ html, body {
 }
 
 .foot {
-  display: flex;
-  justify-content: space-between;
   padding: 16px clamp(16px, 5vw, 40px);
   border-top: 1px solid rgba(237,230,214,0.1);
   font-family: var(--font-mono);
