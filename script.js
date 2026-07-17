@@ -6,9 +6,10 @@
   document.getElementById("cautionText").textContent = CONFIG.caution;
   document.title = "WANTED — " + CONFIG.name;
 
-  // ── Torn paper edge, built as a clip-path so it can only ever affect
-  // the .paper-shape element itself — never the photo or text on top ──
-  function tornEdgeClipPath() {
+  const poster = document.getElementById("poster");
+
+  // ── Torn paper edge as a pixel-space polygon (used to clip the paper canvas) ──
+  function tornEdgePoints(w, h) {
     const pts = [];
     function addEdge(vertical, fixed, from, to, steps, perpJitter, tangJitter) {
       for (let i = 0; i <= steps; i++) {
@@ -16,87 +17,91 @@
         let vary = from + (to - from) * t;
         let f = fixed + (Math.random() - 0.5) * 2 * perpJitter;
         if (i !== 0 && i !== steps) vary += (Math.random() - 0.5) * 2 * tangJitter;
-        pts.push(vertical ? `${f.toFixed(2)}% ${vary.toFixed(2)}%` : `${vary.toFixed(2)}% ${f.toFixed(2)}%`);
+        const px = vertical ? f : vary;
+        const py = vertical ? vary : f;
+        pts.push([(px / 100) * w, (py / 100) * h]);
       }
     }
     addEdge(false, 0, 0, 100, 15, 1.6, 0.8);    // top
     addEdge(true, 100, 0, 100, 15, 1.6, 0.8);   // right
     addEdge(false, 100, 100, 0, 15, 1.6, 0.8);  // bottom
     addEdge(true, 0, 100, 0, 15, 1.6, 0.8);     // left
-    return `polygon(${pts.join(",")})`;
+    return pts;
   }
 
-  document.querySelector(".paper-shape").style.clipPath = tornEdgeClipPath();
+  // ── Paper canvas: renders the paper itself, so burning it can punch
+  // real transparent holes that reveal the wooden wall behind it ──
+  const paperCanvas = document.getElementById("paperCanvas");
+  const pctx = paperCanvas.getContext("2d");
+  const noiseImg = new Image();
+  let noiseReady = false;
+  noiseImg.onload = () => {
+    noiseReady = true;
+  };
+  noiseImg.src =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E";
 
-  const stage = document.getElementById("posterStage");
-  const poster = document.getElementById("poster");
-  const dust = document.getElementById("dustLayer");
-  const scene = document.getElementById("scene");
+  function paintPaperTexture(w, h) {
+    pctx.fillStyle = "#e8d2a0";
+    pctx.fillRect(0, 0, w, h);
 
-  let targetX = 0, targetY = 0; // -1 to 1
-  let curX = 0, curY = 0;
+    pctx.save();
+    pctx.globalCompositeOperation = "multiply";
+    const g1 = pctx.createRadialGradient(w * 0.15, h * 0.1, 0, w * 0.15, h * 0.1, w * 0.5);
+    g1.addColorStop(0, "rgba(122,52,24,0.22)");
+    g1.addColorStop(1, "rgba(122,52,24,0)");
+    pctx.fillStyle = g1;
+    pctx.fillRect(0, 0, w, h);
 
-  function applyTilt() {
-    // smooth easing toward target
-    curX += (targetX - curX) * 0.08;
-    curY += (targetY - curY) * 0.08;
+    const g2 = pctx.createRadialGradient(w * 0.85, h * 0.9, 0, w * 0.85, h * 0.9, w * 0.55);
+    g2.addColorStop(0, "rgba(122,52,24,0.26)");
+    g2.addColorStop(1, "rgba(122,52,24,0)");
+    pctx.fillStyle = g2;
+    pctx.fillRect(0, 0, w, h);
 
-    const rotY = curX * 14;   // left-right tilt
-    const rotX = -curY * 14;  // up-down tilt
-
-    poster.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
-    dust.style.transform = `translate(${curX * -30}px, ${curY * -20}px)`;
-
-    requestAnimationFrame(applyTilt);
-  }
-
-  function handlePointer(clientX, clientY) {
-    const rect = scene.getBoundingClientRect();
-    const x = (clientX - rect.left) / rect.width;  // 0 to 1
-    const y = (clientY - rect.top) / rect.height;
-    targetX = (x - 0.5) * 2;
-    targetY = (y - 0.5) * 2;
-  }
-
-  window.addEventListener("pointermove", (e) => {
-    handlePointer(e.clientX, e.clientY);
-  });
-
-  window.addEventListener("pointerleave", () => {
-    targetX = 0;
-    targetY = 0;
-  });
-
-  // gentle device-tilt parallax on mobile, if permission isn't gated
-  window.addEventListener("deviceorientation", (e) => {
-    if (e.gamma == null || e.beta == null) return;
-    targetX = Math.max(-1, Math.min(1, e.gamma / 30));
-    targetY = Math.max(-1, Math.min(1, (e.beta - 45) / 30));
-  });
-
-  requestAnimationFrame(applyTilt);
-
-  // ── Lighter cursor + burn effect ──
-  const cursorEl = document.getElementById("lighterCursor");
-  const burnCanvas = document.getElementById("burnCanvas");
-  const bctx = burnCanvas.getContext("2d");
-  const emberCanvas = document.getElementById("emberCanvas");
-  const ectx = emberCanvas.getContext("2d");
-
-  function sizeCanvases() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    for (const [canvas, ctx] of [[burnCanvas, bctx], [emberCanvas, ectx]]) {
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (noiseReady) {
+      const pattern = pctx.createPattern(noiseImg, "repeat");
+      pctx.globalAlpha = 0.35;
+      pctx.fillStyle = pattern;
+      pctx.fillRect(0, 0, w, h);
+      pctx.globalAlpha = 1;
     }
+    pctx.restore();
   }
-  sizeCanvases();
-  window.addEventListener("resize", sizeCanvases);
+
+  function initPaperCanvas() {
+    const rect = poster.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    paperCanvas.width = rect.width * dpr;
+    paperCanvas.height = rect.height * dpr;
+    pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // clip to the torn-paper silhouette — this clip persists for the life
+    // of the context, so every later burn/texture draw is auto-confined to it
+    const pts = tornEdgePoints(rect.width, rect.height);
+    pctx.beginPath();
+    pts.forEach(([x, y], i) => (i === 0 ? pctx.moveTo(x, y) : pctx.lineTo(x, y)));
+    pctx.closePath();
+    pctx.clip();
+
+    paintPaperTexture(rect.width, rect.height);
+  }
+
+  initPaperCanvas();
+  if (!noiseReady) {
+    noiseImg.addEventListener("load", () => paintPaperTexture(poster.getBoundingClientRect().width, poster.getBoundingClientRect().height), { once: true });
+  }
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(initPaperCanvas, 150);
+  });
+
+  // ── Lighter cursor ──
+  const cursorEl = document.getElementById("lighterCursor");
 
   let isLit = false;
-  let lastBurnX = null;
-  let lastBurnY = null;
   let pointerX = window.innerWidth / 2;
   let pointerY = window.innerHeight / 2;
 
@@ -120,82 +125,119 @@
       const a = i * angleStep;
       const r = baseR * (1 - jag / 2 + Math.random() * jag);
       const x = cx + Math.cos(a) * r;
-      const y = cy + Math.sin(a) * r * 0.9; // slightly flattened, paper-scorch style
+      const y = cy + Math.sin(a) * r * 0.9;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
   }
 
-  // one scorch stamp: wide soft singe (multiplies into the paper color),
-  // a ragged dark char ring, a near-black burnt-through core, and a few
-  // thin radiating fiber cracks — this is what gets baked permanently
-  // into the burn canvas.
-  function burnAt(x, y) {
-    const cx = x + (Math.random() - 0.5) * 4;
-    const cy = y + (Math.random() - 0.5) * 4;
+  // one scorch stamp on the paper canvas, in poster-local coordinates:
+  // soft singe -> ragged char ring -> a real burnt-through hole that
+  // lets the wall show through. Holding the flame in one spot stacks
+  // more punches there, so the hole visibly grows.
+  function scorchPaperAt(lx, ly) {
+    const cx = lx + (Math.random() - 0.5) * 4;
+    const cy = ly + (Math.random() - 0.5) * 4;
 
-    bctx.save();
-    bctx.globalCompositeOperation = "multiply";
-    bctx.fillStyle = "rgba(120, 60, 20, 0.22)";
-    blobPath(bctx, cx, cy, 20 + Math.random() * 8, 0.7, 10);
-    bctx.fill();
+    pctx.save();
+    pctx.globalCompositeOperation = "multiply";
+    pctx.fillStyle = "rgba(120, 60, 20, 0.28)";
+    blobPath(pctx, cx, cy, 20 + Math.random() * 8, 0.7, 10);
+    pctx.fill();
 
-    bctx.fillStyle = "rgba(70, 32, 12, 0.5)";
-    blobPath(bctx, cx, cy, 12 + Math.random() * 5, 0.8, 9);
-    bctx.fill();
-    bctx.restore();
+    pctx.fillStyle = "rgba(60, 26, 10, 0.6)";
+    blobPath(pctx, cx, cy, 12 + Math.random() * 5, 0.8, 9);
+    pctx.fill();
+    pctx.restore();
 
-    bctx.save();
-    bctx.globalCompositeOperation = "source-over";
-    bctx.fillStyle = "rgba(18, 9, 5, 0.88)";
-    blobPath(bctx, cx, cy, 5.5 + Math.random() * 3, 0.9, 8);
-    bctx.fill();
+    pctx.save();
+    pctx.globalCompositeOperation = "source-over";
+    pctx.fillStyle = "rgba(15, 8, 4, 0.9)";
+    blobPath(pctx, cx, cy, 6 + Math.random() * 3, 0.9, 8);
+    pctx.fill();
 
-    // fiber cracks radiating from the core
-    bctx.strokeStyle = "rgba(35, 16, 6, 0.5)";
-    bctx.lineCap = "round";
+    pctx.strokeStyle = "rgba(35, 16, 6, 0.5)";
+    pctx.lineCap = "round";
     const cracks = 3 + Math.floor(Math.random() * 3);
     for (let i = 0; i < cracks; i++) {
       const a = Math.random() * Math.PI * 2;
       const len = 8 + Math.random() * 14;
-      bctx.lineWidth = 0.6 + Math.random() * 1;
-      bctx.beginPath();
-      bctx.moveTo(cx + Math.cos(a) * 4, cy + Math.sin(a) * 4);
-      bctx.lineTo(cx + Math.cos(a) * (4 + len), cy + Math.sin(a) * (4 + len));
-      bctx.stroke();
+      pctx.lineWidth = 0.6 + Math.random() * 1;
+      pctx.beginPath();
+      pctx.moveTo(cx + Math.cos(a) * 4, cy + Math.sin(a) * 4);
+      pctx.lineTo(cx + Math.cos(a) * (4 + len), cy + Math.sin(a) * (4 + len));
+      pctx.stroke();
     }
-    bctx.restore();
+    pctx.restore();
+
+    // the actual burn-through hole — this is what reveals the wooden wall
+    pctx.save();
+    pctx.globalCompositeOperation = "destination-out";
+    blobPath(pctx, cx, cy, 3 + Math.random() * 2, 1, 7);
+    pctx.fill();
+    pctx.restore();
   }
 
-  function burnAlong(x0, y0, x1, y1) {
-    const dist = Math.hypot(x1 - x0, y1 - y0);
-    const steps = Math.max(1, Math.floor(dist / 6));
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      burnAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
-    }
+  // ── Ember canvas: transient cartoon flame licks + a tip glow, both
+  // fade out every frame instead of accumulating ──
+  const emberCanvas = document.getElementById("emberCanvas");
+  const ectx = emberCanvas.getContext("2d");
+
+  function sizeEmberCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    emberCanvas.width = window.innerWidth * dpr;
+    emberCanvas.height = window.innerHeight * dpr;
+    ectx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  sizeEmberCanvas();
+  window.addEventListener("resize", sizeEmberCanvas);
+
+  // bold, flat-colored cartoon flame tongue with a dark outline
+  function drawFlameLick(x, y, size, rot) {
+    ectx.save();
+    ectx.globalCompositeOperation = "source-over";
+    ectx.translate(x, y);
+    ectx.rotate(rot);
+    const w = size * 0.45;
+    const h = size;
+
+    ectx.beginPath();
+    ectx.moveTo(0, h * 0.15);
+    ectx.bezierCurveTo(-w, -h * 0.1, -w * 0.85, -h * 0.7, 0, -h);
+    ectx.bezierCurveTo(w * 0.85, -h * 0.7, w, -h * 0.1, 0, h * 0.15);
+    ectx.closePath();
+    ectx.fillStyle = "rgba(255, 106, 26, 0.95)";
+    ectx.fill();
+    ectx.lineWidth = 1.4;
+    ectx.strokeStyle = "rgba(110, 26, 0, 0.55)";
+    ectx.stroke();
+
+    ectx.beginPath();
+    ectx.moveTo(0, h * 0.05);
+    ectx.bezierCurveTo(-w * 0.5, -h * 0.05, -w * 0.45, -h * 0.5, 0, -h * 0.7);
+    ectx.bezierCurveTo(w * 0.45, -h * 0.5, w * 0.5, -h * 0.05, 0, h * 0.05);
+    ectx.closePath();
+    ectx.fillStyle = "rgba(255, 224, 110, 0.95)";
+    ectx.fill();
+    ectx.restore();
   }
 
-  // glowing ember layer: fades every frame instead of accumulating,
-  // so the flame glow trails and dies out instead of leaving hard dots
   function emberLoop() {
-    const w = emberCanvas.width / (Math.min(window.devicePixelRatio || 1, 2));
-    const h = emberCanvas.height / (Math.min(window.devicePixelRatio || 1, 2));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = emberCanvas.width / dpr;
+    const h = emberCanvas.height / dpr;
 
     ectx.globalCompositeOperation = "destination-out";
-    ectx.fillStyle = "rgba(0, 0, 0, 0.15)";
+    ectx.fillStyle = "rgba(0, 0, 0, 0.16)";
     ectx.fillRect(0, 0, w, h);
 
     if (isLit && withinPoster(pointerX, pointerY)) {
       ectx.globalCompositeOperation = "lighter";
-      const flicker = 12 + Math.sin(Date.now() / 45) * 3 + Math.random() * 3;
-      const grad = ectx.createRadialGradient(
-        pointerX, pointerY, 0,
-        pointerX, pointerY, flicker
-      );
-      grad.addColorStop(0, "rgba(255, 240, 180, 0.9)");
-      grad.addColorStop(0.35, "rgba(255, 140, 30, 0.7)");
+      const flicker = 8 + Math.sin(Date.now() / 45) * 2 + Math.random() * 2;
+      const grad = ectx.createRadialGradient(pointerX, pointerY, 0, pointerX, pointerY, flicker);
+      grad.addColorStop(0, "rgba(255, 240, 180, 0.85)");
+      grad.addColorStop(0.35, "rgba(255, 140, 30, 0.6)");
       grad.addColorStop(1, "rgba(200, 50, 0, 0)");
       ectx.fillStyle = grad;
       ectx.beginPath();
@@ -207,6 +249,33 @@
   }
   requestAnimationFrame(emberLoop);
 
+  // fires whenever the paper actually catches: punches the hole/char on
+  // the paper canvas and spawns a little cartoon flame lick over it
+  function burnAt(clientX, clientY) {
+    const rect = poster.getBoundingClientRect();
+    scorchPaperAt(clientX - rect.left, clientY - rect.top);
+
+    if (Math.random() < 0.85) {
+      drawFlameLick(
+        clientX + (Math.random() - 0.5) * 6,
+        clientY + (Math.random() - 0.5) * 4,
+        11 + Math.random() * 9,
+        (Math.random() - 0.5) * 0.7
+      );
+    }
+  }
+
+  function burnAlong(x0, y0, x1, y1) {
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.floor(dist / 7));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      burnAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+    }
+  }
+
+  let lastBurnX = null;
+  let lastBurnY = null;
   let idleBurnTimer = null;
 
   function startFlame() {
@@ -217,7 +286,7 @@
     if (withinPoster(pointerX, pointerY)) burnAt(pointerX, pointerY);
     idleBurnTimer = window.setInterval(() => {
       if (isLit && withinPoster(pointerX, pointerY)) burnAt(pointerX, pointerY);
-    }, 110);
+    }, 130);
   }
 
   function extinguish() {
@@ -240,12 +309,9 @@
       } else {
         burnAlong(lastBurnX, lastBurnY, e.clientX, e.clientY);
       }
-      lastBurnX = e.clientX;
-      lastBurnY = e.clientY;
-    } else {
-      lastBurnX = e.clientX;
-      lastBurnY = e.clientY;
     }
+    lastBurnX = e.clientX;
+    lastBurnY = e.clientY;
   });
 
   window.addEventListener("pointerdown", (e) => {
