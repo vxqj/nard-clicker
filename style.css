@@ -219,6 +219,16 @@ html, body, .scene {
   pointer-events: none;
 }
 
+#emberCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 45;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
 .lighter-cursor {
   position: fixed;
   top: 0;
