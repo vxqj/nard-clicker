@@ -75,4 +75,119 @@
   });
 
   requestAnimationFrame(applyTilt);
+
+  // ── Lighter cursor + burn effect ──
+  const cursorEl = document.getElementById("lighterCursor");
+  const burnCanvas = document.getElementById("burnCanvas");
+  const bctx = burnCanvas.getContext("2d");
+
+  function sizeBurnCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    burnCanvas.width = window.innerWidth * dpr;
+    burnCanvas.height = window.innerHeight * dpr;
+    bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  sizeBurnCanvas();
+  window.addEventListener("resize", sizeBurnCanvas);
+
+  let isLit = false;
+  let lastBurnX = null;
+  let lastBurnY = null;
+  let pointerX = window.innerWidth / 2;
+  let pointerY = window.innerHeight / 2;
+
+  function moveCursor(x, y) {
+    pointerX = x;
+    pointerY = y;
+    cursorEl.style.left = x + "px";
+    cursorEl.style.top = y + "px";
+  }
+
+  function withinPoster(x, y) {
+    const rect = poster.getBoundingClientRect();
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  }
+
+  // stamp one scorch mark: outer singe, mid char, dark core
+  function burnAt(x, y) {
+    const jitter = () => (Math.random() - 0.5) * 6;
+    const cx = x + jitter();
+    const cy = y + jitter();
+
+    bctx.globalCompositeOperation = "source-over";
+
+    bctx.beginPath();
+    bctx.fillStyle = "rgba(90, 50, 20, 0.16)";
+    bctx.arc(cx, cy, 16 + Math.random() * 6, 0, Math.PI * 2);
+    bctx.fill();
+
+    bctx.beginPath();
+    bctx.fillStyle = "rgba(40, 20, 8, 0.45)";
+    bctx.arc(cx, cy, 9 + Math.random() * 4, 0, Math.PI * 2);
+    bctx.fill();
+
+    bctx.beginPath();
+    bctx.fillStyle = "rgba(8, 4, 2, 0.9)";
+    bctx.arc(cx, cy, 4 + Math.random() * 2.5, 0, Math.PI * 2);
+    bctx.fill();
+  }
+
+  function burnAlong(x0, y0, x1, y1) {
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.floor(dist / 5));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      burnAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+    }
+  }
+
+  let idleBurnTimer = null;
+
+  function startFlame() {
+    isLit = true;
+    cursorEl.classList.add("lit");
+    lastBurnX = pointerX;
+    lastBurnY = pointerY;
+    if (withinPoster(pointerX, pointerY)) burnAt(pointerX, pointerY);
+    idleBurnTimer = window.setInterval(() => {
+      if (isLit && withinPoster(pointerX, pointerY)) burnAt(pointerX, pointerY);
+    }, 90);
+  }
+
+  function extinguish() {
+    isLit = false;
+    cursorEl.classList.remove("lit");
+    lastBurnX = null;
+    lastBurnY = null;
+    if (idleBurnTimer) {
+      clearInterval(idleBurnTimer);
+      idleBurnTimer = null;
+    }
+  }
+
+  window.addEventListener("pointermove", (e) => {
+    moveCursor(e.clientX, e.clientY);
+    cursorEl.classList.add("ready");
+    if (isLit && withinPoster(e.clientX, e.clientY)) {
+      if (lastBurnX === null) {
+        burnAt(e.clientX, e.clientY);
+      } else {
+        burnAlong(lastBurnX, lastBurnY, e.clientX, e.clientY);
+      }
+      lastBurnX = e.clientX;
+      lastBurnY = e.clientY;
+    } else {
+      lastBurnX = e.clientX;
+      lastBurnY = e.clientY;
+    }
+  });
+
+  window.addEventListener("pointerdown", (e) => {
+    moveCursor(e.clientX, e.clientY);
+    startFlame();
+  });
+
+  window.addEventListener("pointerup", extinguish);
+  window.addEventListener("pointercancel", extinguish);
+  window.addEventListener("blur", extinguish);
 })();
