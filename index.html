@@ -1,67 +1,846 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>WANTED</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Rye&family=Special+Elite&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css" />
-</head>
-<body>
+<!-- Nathan's Maze — 3D low-poly horror game -->
+<style>
+  :root{
+    --bg:#050505;
+    --line:#3a1414;
+    --accent:#c62828;
+    --accent2:#7a1f1f;
+    --text:#d8d0c8;
+    --dim:#6b6259;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#000;overflow:hidden;height:100%;}
+  #wrap{ position:relative; width:100%; height:100vh; background:#000; font-family:'Courier New',monospace; color:var(--text); }
+  #three-canvas{ display:block; width:100%; height:100%; cursor:crosshair; }
+  .overlay{
+    position:absolute; inset:0; display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center; background:rgba(0,0,0,0.9); z-index:20; padding:20px;
+  }
+  .hidden{display:none !important;}
+  h1.title{
+    font-size:clamp(30px,6vw,58px); letter-spacing:6px; color:var(--accent);
+    text-shadow:0 0 18px rgba(198,40,40,0.7),0 0 40px rgba(198,40,40,0.3);
+    margin:0 0 6px 0; font-weight:900; text-transform:uppercase;
+  }
+  .subtitle{ color:var(--dim); letter-spacing:3px; font-size:13px; margin-bottom:24px; text-transform:uppercase; }
+  .panel{
+    border:1px solid var(--line); background:rgba(20,8,8,0.55); padding:16px 24px; max-width:520px;
+    margin-bottom:22px; text-align:left; font-size:13px; line-height:1.7; color:var(--text);
+  }
+  .panel b{color:var(--accent);}
+  .key{ display:inline-block;border:1px solid var(--dim);border-radius:3px;padding:1px 7px;margin:0 2px;
+    font-size:11px;color:var(--text);background:#1a1414; }
+  button.btn{
+    background:transparent;border:1px solid var(--accent);color:var(--accent);padding:12px 34px;
+    font-family:inherit;letter-spacing:3px;font-size:14px;cursor:pointer;text-transform:uppercase;transition:all .15s ease;
+  }
+  button.btn:hover{ background:var(--accent);color:#0a0000;box-shadow:0 0 24px rgba(198,40,40,0.6); }
+  #hud{ position:absolute; top:14px; left:14px; z-index:10; pointer-events:none; user-select:none; }
+  #objectives{ border:1px solid var(--line); background:rgba(8,4,4,0.7); padding:10px 14px; font-size:12px; letter-spacing:1px; min-width:230px; }
+  #objectives .ohead{ color:var(--accent); text-transform:uppercase; font-size:11px; letter-spacing:3px; margin-bottom:6px; border-bottom:1px solid var(--line); padding-bottom:5px; }
+  #objectives .oline{ margin:3px 0; color:var(--dim); }
+  #objectives .oline.done{ color:#7a9a6b; text-decoration:line-through; }
+  #flash-status{ margin-top:8px; font-size:11px; color:var(--dim); letter-spacing:1px; }
+  #crosshair{
+    position:absolute; top:50%; left:50%; width:5px; height:5px; margin:-2px 0 0 -2px;
+    background:rgba(255,255,255,0.35); border-radius:50%; z-index:9; pointer-events:none;
+  }
+  #jumpscareWrap{ background:#000; padding:0; }
+  #jumpscare{ position:absolute; inset:0; z-index:30; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  #jumpscare img{ width:42%; filter:contrast(1.3) saturate(1.1); animation:jscare .35s ease-out forwards; }
+  @keyframes jscare{ 0%{transform:scale(.3);opacity:.3;} 40%{transform:scale(1.5);opacity:1;} 100%{transform:scale(2.4);opacity:1;} }
+  #redflash{ position:absolute; inset:0; background:#7a0000; opacity:0; pointer-events:none; z-index:29; }
+  #msgline{
+    position:absolute; bottom:16px; left:50%; transform:translateX(-50%); color:var(--accent); font-size:12px;
+    letter-spacing:2px; text-transform:uppercase; background:rgba(0,0,0,0.6); padding:8px 16px; border:1px solid var(--line);
+    opacity:0; transition:opacity .3s ease; z-index:10; white-space:nowrap;
+  }
+  #loading{ position:absolute; inset:0; z-index:25; display:flex; align-items:center; justify-content:center; background:#000; color:var(--dim); letter-spacing:3px; font-size:13px; }
+</style>
 
-  <!-- (torn edge is now generated as a clip-path in script.js — more reliable than SVG filters) -->
+<div id="wrap">
+  <canvas id="three-canvas"></canvas>
+  <div id="crosshair" class="hidden"></div>
+  <div id="redflash"></div>
 
-  <div class="scene" id="scene">
-    <div class="wall"></div>
-    <div class="dust" id="dustLayer"></div>
-
-    <div class="poster-stage" id="posterStage">
-      <div class="poster" id="poster">
-        <canvas class="paper-canvas" id="paperCanvas"></canvas>
-
-        <div class="content">
-          <h1 class="wanted">WANTED</h1>
-          <p class="crime" id="crimeText">FOR CRIMES</p>
-
-          <div class="photo-frame">
-            <img id="photo" src="" alt="Big Nard" draggable="false" />
-          </div>
-
-          <h2 class="name" id="nameText">BIG NARD</h2>
-          <p class="reward" id="rewardText">$15,000 REWARD</p>
-          <p class="caution" id="cautionText">approach with caution</p>
-        </div>
-
-        <div class="nail nail-tl"></div>
-        <div class="nail nail-tr"></div>
-      </div>
+  <div id="hud" class="hidden">
+    <div id="objectives">
+      <div class="ohead">Objectives</div>
+      <div class="oline" id="obj-collect">Find polaroids &nbsp;0/5</div>
+      <div class="oline" id="obj-switch">Reach the gate switch</div>
+      <div class="oline" id="obj-exit">Escape through the exit</div>
+      <div id="flash-status">flashlight: OFF &mdash; press F to toggle</div>
     </div>
   </div>
 
-  <canvas id="emberCanvas"></canvas>
+  <div id="msgline"></div>
 
-  <div id="lighterCursor" class="lighter-cursor">
-    <svg class="lighter-flame" viewBox="0 0 40 60" width="40" height="60">
-      <path class="flame-outer" d="M20 2c5 8 9 13 9 21a9 9 0 1 1-18 0c0-3 1-5 2.5-7 .3 3 2 4 2 4-1-5 1-9 4.5-13 0 4 1 6 3 8 1 1 2 3.5 2 6.5"/>
-      <path class="flame-inner" d="M20 16c2.5 4 4.5 7 4.5 11a4.5 4.5 0 1 1-9 0c0-2.5 1.5-4.5 3-6 0 1.5.5 2.5 1.5 3-1-3.5.5-5.5 0-8z"/>
-    </svg>
-    <svg class="lighter-body" viewBox="0 0 40 60" width="40" height="60">
-      <rect x="14" y="20" width="12" height="6" rx="1.5" fill="#8a8f94" stroke="#3a3d40" stroke-width="1"/>
-      <circle cx="20" cy="23" r="2.1" fill="#c9cdd1" stroke="#3a3d40" stroke-width="0.8"/>
-      <rect x="10" y="25" width="20" height="30" rx="4" fill="url(#lighterGrad)" stroke="#5b1a12" stroke-width="1.2"/>
-      <rect x="13" y="30" width="14" height="18" rx="2" fill="#000" opacity="0.12"/>
-      <defs>
-        <linearGradient id="lighterGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#e8503a"/>
-          <stop offset="100%" stop-color="#a8291a"/>
-        </linearGradient>
-      </defs>
-    </svg>
+  <div id="loading" class="hidden">building the maze...</div>
+
+  <div id="resumeOverlay" class="overlay hidden" style="background:rgba(0,0,0,0.75);z-index:15;">
+    <div class="subtitle" style="margin-bottom:14px;">paused</div>
+    <button class="btn" id="resumeBtn">Click to look around again</button>
   </div>
 
-  <script src="config.js"></script>
-  <script src="script.js"></script>
-</body>
-</html>
+  <div id="menu" class="overlay">
+    <h1 class="title">Nathan's Maze</h1>
+    <div class="subtitle">he doesn't want you to leave</div>
+    <div class="panel">
+      Somebody dragged you into a low-lit maze built from Nathan's worst memories.
+      Something wearing <b>his face</b> lives in here now, and it isn't friendly.<br><br>
+      &bull; Move with <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> or the <span class="key">Arrow Keys</span><br>
+      &bull; Move your <b>mouse</b> to look around, first-person style<br>
+      &bull; Press <span class="key">F</span> to toggle your flashlight &mdash; it helps you see, but it also helps <b>him</b> see you<br>
+      &bull; Collect all <b>5 polaroids</b> hidden in the maze<br>
+      &bull; Find the <b>gate switch</b> to unlock the exit<br>
+      &bull; Reach the <b>exit</b> before he reaches you<br><br>
+      If he catches you, it's over.<br><br>
+      <span style="color:var(--dim);font-size:11px;">Clicking "Enter the maze" will try to lock your mouse cursor for smoother looking. If your browser blocks that (some embedded previews do), looking around still works — the cursor just stays visible.</span>
+    </div>
+    <button class="btn" id="startBtn">Enter the maze</button>
+  </div>
+
+  <div id="jumpscareWrap" class="overlay hidden">
+    <div id="jumpscare"><img id="jsimg" src="" alt=""></div>
+  </div>
+
+  <div id="gameover" class="overlay hidden">
+    <h1 class="title" style="color:#8a1c1c;">Caught</h1>
+    <div class="subtitle">Nathan found you.</div>
+    <button class="btn" id="retryBtn">Try again</button>
+  </div>
+
+  <div id="winscreen" class="overlay hidden">
+    <h1 class="title" style="color:#7a9a6b;text-shadow:0 0 18px rgba(120,180,100,0.5);">You Escaped</h1>
+    <div class="subtitle">Nathan is still in there. Somewhere.</div>
+    <button class="btn" id="againBtn">Play again</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const MONSTER_IMG_URL = "https://i.ibb.co/XRW2R1p/Chat-GPT-Image-Jul-16-2026-12-07-01-PM-removebg-preview.png";
+  const JUMPSCARE_IMG_URL = "https://i.ibb.co/yFvg1KmJ/Pix-Verse-Image-Effect-prompt-Make-me-stick-my-removebg-preview.png";
+  document.getElementById("jsimg").src = JUMPSCARE_IMG_URL;
+
+  // ---------------- maze ----------------
+  const COLS = 31, ROWS = 23; // odd
+  const TILE = 4;
+  let grid;
+
+  function genMaze(){
+    grid = [];
+    for(let y=0;y<ROWS;y++) grid.push(new Array(COLS).fill(1));
+    function carve(cx,cy){
+      grid[cy][cx]=0;
+      const dirs = shuffle([[2,0],[-2,0],[0,2],[0,-2]]);
+      for(const [dx,dy] of dirs){
+        const nx=cx+dx, ny=cy+dy;
+        if(nx>0&&nx<COLS-1&&ny>0&&ny<ROWS-1&&grid[ny][nx]===1){
+          grid[cy+dy/2][cx+dx/2]=0;
+          carve(nx,ny);
+        }
+      }
+    }
+    carve(1,1);
+    for(let i=0;i<8;i++){
+      const rx=2+Math.floor(Math.random()*(COLS-6));
+      const ry=2+Math.floor(Math.random()*(ROWS-6));
+      const rw=2+Math.floor(Math.random()*3), rh=2+Math.floor(Math.random()*3);
+      for(let y=ry;y<Math.min(ry+rh,ROWS-1);y++)
+        for(let x=rx;x<Math.min(rx+rw,COLS-1);x++) grid[y][x]=0;
+    }
+  }
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function randFloorCell(minDistFrom,minDist){
+    let tries=0;
+    while(tries<4000){
+      tries++;
+      const x=1+Math.floor(Math.random()*(COLS-2)), y=1+Math.floor(Math.random()*(ROWS-2));
+      if(grid[y][x]===0){
+        if(!minDistFrom) return {x,y};
+        if(Math.hypot(x-minDistFrom.x,y-minDistFrom.y)>=minDist) return {x,y};
+      }
+    }
+    return {x:1,y:1};
+  }
+  function worldX(cx){ return cx*TILE + TILE/2; }
+  function worldZ(cy){ return cy*TILE + TILE/2; }
+
+  // ---------------- three.js core ----------------
+  const canvasEl = document.getElementById("three-canvas");
+  const renderer = new THREE.WebGLRenderer({canvas:canvasEl, antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x030202);
+  scene.fog = new THREE.FogExp2(0x030202, 0.05);
+
+  const camera = new THREE.PerspectiveCamera(65, window.innerWidth/window.innerHeight, 0.1, 200);
+
+  function resize(){
+    const w=window.innerWidth, h=window.innerHeight;
+    renderer.setSize(w,h);
+    camera.aspect = w/h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // ---------------- textures ----------------
+  function makeWallTexture(){
+    const c=document.createElement("canvas"); c.width=128;c.height=128;
+    const g=c.getContext("2d");
+    g.fillStyle="#20120f"; g.fillRect(0,0,128,128);
+    g.strokeStyle="rgba(0,0,0,0.5)"; g.lineWidth=2;
+    for(let y=0;y<128;y+=16){
+      g.beginPath(); g.moveTo(0,y); g.lineTo(128,y); g.stroke();
+      const off = (y/16)%2===0 ? 0 : 16;
+      for(let x=off;x<128;x+=32){ g.beginPath(); g.moveTo(x,y); g.lineTo(x,y+16); g.stroke(); }
+    }
+    for(let i=0;i<400;i++){
+      g.fillStyle = "rgba("+(60+Math.random()*40|0)+","+(20+Math.random()*15|0)+","+(15+Math.random()*10|0)+",0.5)";
+      g.fillRect(Math.random()*128, Math.random()*128, 2, 2);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+  function makeFloorTexture(){
+    const c=document.createElement("canvas"); c.width=128;c.height=128;
+    const g=c.getContext("2d");
+    g.fillStyle="#0d0a08"; g.fillRect(0,0,128,128);
+    for(let y=0;y<128;y+=32) for(let x=0;x<128;x+=32){
+      g.fillStyle = ((x+y)/32)%2===0 ? "#100c0a" : "#0a0807";
+      g.fillRect(x,y,32,32);
+    }
+    for(let i=0;i<300;i++){
+      g.fillStyle="rgba(0,0,0,"+(Math.random()*0.3)+")";
+      g.fillRect(Math.random()*128,Math.random()*128,3,3);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+  const wallTex = makeWallTexture();
+  const floorTex = makeFloorTexture();
+
+  // ---------------- lighting ----------------
+  const ambient = new THREE.AmbientLight(0x191018, 0.55);
+  scene.add(ambient);
+  const moon = new THREE.DirectionalLight(0x2a3550, 0.18);
+  moon.position.set(20,40,10);
+  scene.add(moon);
+
+  const flashlight = new THREE.SpotLight(0xfff2d0, 0, 40, 0.5, 0.45, 1.4);
+  flashlight.castShadow = true;
+  flashlight.shadow.mapSize.set(1024,1024);
+  scene.add(flashlight);
+  scene.add(flashlight.target);
+
+  // ---------------- maze geometry ----------------
+  let mazeGroup, wallInstMesh, floorMesh, gateMesh, switchMesh, switchLight;
+  let polaroidMeshes = [];
+
+  function buildMazeGeometry(){
+    mazeGroup = new THREE.Group();
+
+    // floor
+    const floorGeo = new THREE.PlaneGeometry(COLS*TILE, ROWS*TILE);
+    floorTex.repeat.set(COLS, ROWS);
+    const floorMat = new THREE.MeshStandardMaterial({map:floorTex, roughness:0.95});
+    floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    floorMesh.rotation.x = -Math.PI/2;
+    floorMesh.position.set(COLS*TILE/2, 0, ROWS*TILE/2);
+    floorMesh.receiveShadow = true;
+    mazeGroup.add(floorMesh);
+
+    // walls (instanced)
+    const wallCells = [];
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(grid[y][x]===1) wallCells.push({x,y});
+    const wallH = 4.5;
+    const wallGeo = new THREE.BoxGeometry(TILE, wallH, TILE);
+    wallTex.repeat.set(1,1);
+    const wallMat = new THREE.MeshStandardMaterial({map:wallTex, roughness:0.9});
+    wallInstMesh = new THREE.InstancedMesh(wallGeo, wallMat, wallCells.length);
+    wallInstMesh.castShadow = true;
+    wallInstMesh.receiveShadow = true;
+    const m = new THREE.Matrix4();
+    wallCells.forEach((cell,i)=>{
+      m.makeTranslation(worldX(cell.x), wallH/2, worldZ(cell.y));
+      wallInstMesh.setMatrixAt(i,m);
+    });
+    wallInstMesh.instanceMatrix.needsUpdate = true;
+    mazeGroup.add(wallInstMesh);
+
+    scene.add(mazeGroup);
+  }
+
+  function makePhotoTexture(){
+    const c=document.createElement("canvas"); c.width=64;c.height=76;
+    const g=c.getContext("2d");
+    g.fillStyle="#e8e0d0"; g.fillRect(0,0,64,76);
+    g.fillStyle="#2a2a2a"; g.fillRect(6,6,52,52);
+    g.fillStyle="#453f38"; g.fillRect(10,10,44,44);
+    g.fillStyle="#c62828"; g.beginPath(); g.arc(32,32,10,0,Math.PI*2); g.fill();
+    return new THREE.CanvasTexture(c);
+  }
+  const photoTex = makePhotoTexture();
+
+  function placeEntities(){
+    // gate switch pedestal
+    const pedGeo = new THREE.CylinderGeometry(0.4,0.5,1.1,8);
+    const pedMat = new THREE.MeshStandardMaterial({color:0x241a14, roughness:0.8});
+    const pedestal = new THREE.Mesh(pedGeo, pedMat);
+    pedestal.castShadow = true;
+    const orbGeo = new THREE.SphereGeometry(0.32,12,12);
+    const orbMat = new THREE.MeshStandardMaterial({color:0xc68a28, emissive:0xc68a28, emissiveIntensity:1.2});
+    const orb = new THREE.Mesh(orbGeo, orbMat);
+    orb.position.y = 0.85;
+    switchLight = new THREE.PointLight(0xc68a28, 1.2, 6);
+    switchLight.position.y = 1.0;
+    switchMesh = new THREE.Group();
+    switchMesh.add(pedestal); switchMesh.add(orb); switchMesh.add(switchLight);
+    switchMesh.userData.orb = orb; switchMesh.userData.orbMat = orbMat;
+    scene.add(switchMesh);
+
+    // gate barrier
+    const gateGeo = new THREE.BoxGeometry(TILE*0.9, 4.5, 0.4);
+    const gateMat = new THREE.MeshStandardMaterial({color:0x3a0f0f, emissive:0xc62828, emissiveIntensity:0.5, roughness:0.6});
+    gateMesh = new THREE.Mesh(gateGeo, gateMat);
+    gateMesh.castShadow = true;
+    scene.add(gateMesh);
+  }
+
+  function buildPolaroids(polaroids){
+    polaroidMeshes = [];
+    const geo = new THREE.PlaneGeometry(0.6,0.72);
+    polaroids.forEach(p=>{
+      const mat = new THREE.MeshStandardMaterial({map:photoTex, emissive:0x332211, emissiveIntensity:0.3, side:THREE.DoubleSide});
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(p.x, 1.1, p.z);
+      const light = new THREE.PointLight(0xffcf8f, 0.6, 3.5);
+      light.position.set(p.x, 1.3, p.z);
+      scene.add(mesh); scene.add(light);
+      polaroidMeshes.push({mesh, light, data:p});
+    });
+  }
+
+  // ---------------- humanoid builder (used for player, low-poly style) ----------------
+  function buildHumanoid(opts){
+    const skin = opts.skin || 0xd8b48c;
+    const shirt = opts.shirt || 0x2e3a4e;
+    const pants = opts.pants || 0x22221f;
+    const root = new THREE.Group();
+
+    const torsoGeo = new THREE.BoxGeometry(0.5,0.62,0.28);
+    const torsoMat = new THREE.MeshStandardMaterial({color:shirt, roughness:0.8});
+    const torso = new THREE.Mesh(torsoGeo, torsoMat);
+    torso.position.y = 1.05;
+    torso.castShadow = true;
+    root.add(torso);
+
+    const headGeo = new THREE.SphereGeometry(0.24,10,10);
+    const headMat = new THREE.MeshStandardMaterial({color:skin, roughness:0.9});
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.y = 1.05 + 0.31 + 0.24;
+    head.castShadow = true;
+    root.add(head);
+
+    function limb(color, len, radius){
+      const g = new THREE.Group();
+      const geo = new THREE.CylinderGeometry(radius, radius*0.85, len, 8);
+      const mat = new THREE.MeshStandardMaterial({color, roughness:0.85});
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.y = -len/2;
+      mesh.castShadow = true;
+      g.add(mesh);
+      return g;
+    }
+
+    const armL = limb(skin, 0.62, 0.08);
+    armL.position.set(-0.34, 1.32, 0);
+    root.add(armL);
+    const armR = limb(skin, 0.62, 0.08);
+    armR.position.set(0.34, 1.32, 0);
+    root.add(armR);
+
+    const legL = limb(pants, 0.72, 0.11);
+    legL.position.set(-0.15, 0.74, 0);
+    root.add(legL);
+    const legR = limb(pants, 0.72, 0.11);
+    legR.position.set(0.15, 0.74, 0);
+    root.add(legR);
+
+    root.userData.parts = {torso, head, armL, armR, legL, legR};
+    return root;
+  }
+
+  const player3D = buildHumanoid({skin:0xd8b48c, shirt:0x2e3a4e, pants:0x22221f});
+  scene.add(player3D);
+
+  // ---------------- monster ----------------
+  let monsterHeadMat, monsterGlow;
+  function buildMonster(){
+    const root = new THREE.Group();
+
+    const torsoGeo = new THREE.CylinderGeometry(0.32,0.42,1.1,8);
+    const torsoMat = new THREE.MeshStandardMaterial({color:0x120404, roughness:0.95});
+    const torso = new THREE.Mesh(torsoGeo, torsoMat);
+    torso.position.y = 1.15;
+    torso.castShadow = true;
+    root.add(torso);
+
+    function limb(len, radius){
+      const geo = new THREE.CylinderGeometry(radius*0.6, radius, len, 6);
+      const mat = new THREE.MeshStandardMaterial({color:0x0e0303, roughness:0.95});
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      return mesh;
+    }
+    const armL = limb(0.9,0.07); armL.position.set(-0.42,1.2,0.05); armL.rotation.z = 0.5;
+    const armR = limb(0.9,0.07); armR.position.set(0.42,1.2,0.05); armR.rotation.z = -0.5;
+    root.add(armL); root.add(armR);
+    const legL = limb(0.9,0.1); legL.position.set(-0.16,0.5,0);
+    const legR = limb(0.9,0.1); legR.position.set(0.16,0.5,0);
+    root.add(legL); root.add(legR);
+
+    // billboard face — placeholder material until texture loads
+    const headGeo = new THREE.PlaneGeometry(1.15,1.15);
+    monsterHeadMat = new THREE.MeshBasicMaterial({color:0x330000, transparent:true, side:THREE.DoubleSide, depthWrite:false});
+    const head = new THREE.Mesh(headGeo, monsterHeadMat);
+    head.position.y = 1.95;
+    root.add(head);
+    root.userData.head = head;
+
+    monsterGlow = new THREE.PointLight(0xff2020, 0, 6);
+    monsterGlow.position.y = 1.9;
+    root.add(monsterGlow);
+
+    return root;
+  }
+  const monster3D = buildMonster();
+  scene.add(monster3D);
+
+  // load the face texture for the monster's head — with a safe fallback if the host blocks CORS
+  function proceduralFaceTexture(){
+    const c=document.createElement("canvas"); c.width=128;c.height=128;
+    const g=c.getContext("2d");
+    g.clearRect(0,0,128,128);
+    g.fillStyle="#170303"; g.beginPath(); g.arc(64,64,60,0,Math.PI*2); g.fill();
+    g.fillStyle="#ff2b2b";
+    g.beginPath(); g.ellipse(42,58,10,6,0,0,Math.PI*2); g.fill();
+    g.beginPath(); g.ellipse(86,58,10,6,0,0,Math.PI*2); g.fill();
+    g.strokeStyle="#ff2b2b"; g.lineWidth=4;
+    g.beginPath(); g.moveTo(30,95); for(let x=30;x<=98;x+=8){ g.lineTo(x, 95 + (((x/8)|0)%2?10:0)); } g.stroke();
+    return new THREE.CanvasTexture(c);
+  }
+  function loadMonsterTexture(){
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    let settled = false;
+    const fallback = ()=>{
+      if(settled) return; settled = true;
+      monsterHeadMat.map = proceduralFaceTexture();
+      monsterHeadMat.color.set(0xffffff);
+      monsterHeadMat.needsUpdate = true;
+    };
+    img.onload = ()=>{
+      if(settled) return; settled = true;
+      try{
+        const tex = new THREE.Texture(img);
+        tex.needsUpdate = true;
+        monsterHeadMat.map = tex;
+        monsterHeadMat.color.set(0xffffff);
+        monsterHeadMat.needsUpdate = true;
+      }catch(e){ fallback(); }
+    };
+    img.onerror = fallback;
+    img.src = MONSTER_IMG_URL;
+    setTimeout(fallback, 4000); // never leave the head blank
+  }
+  loadMonsterTexture();
+
+  // ---------------- game state ----------------
+  let state="menu";
+  let player = {x:0,z:0,cx:1,cy:1,angle:0,speed:6.2};
+  let monster = {x:0,z:0,cx:1,cy:1,state:"wander",path:[],pathTimer:0,speed:3.2,bob:0};
+  let polaroidsData=[], gateSwitchData=null, exitCell=null;
+  let flashlightOn=false, switchActivated=false;
+  let facing={x:0,z:1};
+  let keys={};
+  let walkPhase=0, msgTimer=0, lastTime=0;
+
+
+  function collected(){ return polaroidsData.filter(p=>p.collected).length; }
+  function updateHud(){
+    document.getElementById("obj-collect").textContent = "Find polaroids  " + collected() + "/5";
+    document.getElementById("obj-collect").classList.toggle("done", collected()===5);
+    document.getElementById("obj-switch").classList.toggle("done", switchActivated);
+    document.getElementById("flash-status").textContent = "flashlight: " + (flashlightOn?"ON":"OFF") + " — press F to toggle";
+  }
+  function showMsg(txt){
+    const el = document.getElementById("msgline");
+    el.textContent = txt; el.style.opacity = 1; msgTimer = 2.2;
+  }
+
+  function canMoveTo(x,z,r){
+    const pts = [[x-r,z-r],[x+r,z-r],[x-r,z+r],[x+r,z+r]];
+    for(const [px,pz] of pts){
+      const cx=Math.floor(px/TILE), cy=Math.floor(pz/TILE);
+      if(cx<0||cy<0||cx>=COLS||cy>=ROWS) return false;
+      const v = grid[cy][cx];
+      if(v===1) return false;
+      if(v===2) return false;
+    }
+    return true;
+  }
+  function bfsPath(sx,sy,tx,ty){
+    if(sx===tx && sy===ty) return [];
+    const visited = new Set(); const key=(x,y)=>x+","+y;
+    const q=[{x:sx,y:sy,path:[]}]; visited.add(key(sx,sy));
+    let iter=0;
+    while(q.length && iter<5000){
+      iter++;
+      const cur=q.shift();
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=cur.x+dx, ny=cur.y+dy;
+        if(nx<0||ny<0||nx>=COLS||ny>=ROWS) continue;
+        if(grid[ny][nx]===1) continue;
+        if(visited.has(key(nx,ny))) continue;
+        const np = cur.path.concat([{x:nx,y:ny}]);
+        if(nx===tx&&ny===ty) return np;
+        visited.add(key(nx,ny));
+        q.push({x:nx,y:ny,path:np});
+      }
+    }
+    return [];
+  }
+
+  function setup(){
+    genMaze();
+    const start = {x:1,y:1};
+    player.x = worldX(start.x); player.z = worldZ(start.y);
+    player.angle = 0; facing = {x:0,z:1};
+    yaw = 0; pitch = 0;
+
+    polaroidsData = [];
+    for(let i=0;i<5;i++){
+      const c = randFloorCell(start,7);
+      polaroidsData.push({x:worldX(c.x), z:worldZ(c.y), cx:c.x, cy:c.y, collected:false});
+    }
+    const sc = randFloorCell(start,9);
+    gateSwitchData = {x:worldX(sc.x), z:worldZ(sc.y), cx:sc.x, cy:sc.y};
+    switchActivated = false;
+
+    const ec = randFloorCell(start,12);
+    exitCell = ec;
+    grid[ec.y][ec.x] = 2;
+
+    const mc = randFloorCell(start,8);
+    monster.x = worldX(mc.x); monster.z = worldZ(mc.y);
+    monster.cx = mc.x; monster.cy = mc.y;
+    monster.state = "wander"; monster.path = []; monster.pathTimer = 0;
+
+    // rebuild scene geometry
+    if(mazeGroup) scene.remove(mazeGroup);
+    if(switchMesh) scene.remove(switchMesh);
+    if(gateMesh) scene.remove(gateMesh);
+    polaroidMeshes.forEach(p=>{ scene.remove(p.mesh); scene.remove(p.light); });
+    buildMazeGeometry();
+    placeEntities();
+    buildPolaroids(polaroidsData);
+
+    switchMesh.position.set(gateSwitchData.x, 0, gateSwitchData.z);
+    gateMesh.position.set(worldX(exitCell.x), 2.25, worldZ(exitCell.y));
+
+    flashlightOn = false;
+    updateHud();
+
+  }
+
+  // ---------------- input ----------------
+  const MOVE_KEYS = new Set(["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"]);
+  window.addEventListener("keydown", e=>{
+    const k = e.key.toLowerCase();
+    keys[k] = true;
+    if(MOVE_KEYS.has(k)) e.preventDefault(); // stop the page from scrolling and eating the keys
+    if(k==="f" && state==="playing"){
+      flashlightOn = !flashlightOn;
+      updateHud();
+      ensureAudio();
+    }
+  }, {passive:false});
+  window.addEventListener("keyup", e=>{
+    const k = e.key.toLowerCase();
+    keys[k] = false;
+    if(MOVE_KEYS.has(k)) e.preventDefault();
+  }, {passive:false});
+
+  // ---------------- mouse-look ----------------
+  // Uses e.movementX/Y on every mousemove, which works with or without an active
+  // pointer lock. Pointer lock is attempted purely as a cosmetic bonus (it hides the
+  // cursor and lets you spin freely without hitting the edge of the window) — but if
+  // the page is embedded in a sandboxed preview iframe that blocks the Pointer Lock
+  // API, looking around still works normally either way.
+  let yaw = 0, pitch = 0;
+  const MOUSE_SENS = 0.0022;
+  let pointerLocked = false;
+  let pointerLockSupported = !!(canvasEl.requestPointerLock || canvasEl.mozRequestPointerLock);
+
+  function requestLock(){
+    if(!pointerLockSupported) return;
+    try{
+      const p = (canvasEl.requestPointerLock || canvasEl.mozRequestPointerLock).call(canvasEl);
+      if(p && p.catch) p.catch(()=>{ pointerLockSupported = false; });
+    }catch(e){ pointerLockSupported = false; }
+  }
+  canvasEl.addEventListener("click", ()=>{
+    if(state==="playing" && !pointerLocked) requestLock();
+  });
+  document.getElementById("resumeBtn").addEventListener("click", ()=>{
+    requestLock();
+    document.getElementById("resumeOverlay").classList.add("hidden");
+  });
+
+  document.addEventListener("pointerlockchange", ()=>{
+    pointerLocked = (document.pointerLockElement === canvasEl);
+  });
+
+  document.addEventListener("mousemove", e=>{
+    if(state!=="playing") return;
+    yaw -= e.movementX * MOUSE_SENS;
+    pitch -= e.movementY * MOUSE_SENS;
+    const limit = Math.PI/2 - 0.05;
+    if(pitch > limit) pitch = limit;
+    if(pitch < -limit) pitch = -limit;
+  });
+
+
+  let actx=null;
+  function ensureAudio(){
+    if(actx) return;
+    try{
+      actx = new (window.AudioContext||window.webkitAudioContext)();
+      const osc = actx.createOscillator(); const g = actx.createGain();
+      g.gain.value=0.018; osc.type="sawtooth"; osc.frequency.value=44;
+      osc.connect(g).connect(actx.destination); osc.start();
+    }catch(e){}
+  }
+  function screamSfx(){
+    if(!actx) return;
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type="sawtooth";
+    o.frequency.setValueAtTime(180,actx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(900,actx.currentTime+0.25);
+    o.frequency.exponentialRampToValueAtTime(60,actx.currentTime+0.6);
+    g.gain.setValueAtTime(0.28,actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,actx.currentTime+0.9);
+    o.connect(g).connect(actx.destination);
+    o.start(); o.stop(actx.currentTime+0.9);
+  }
+
+  // ---------------- update ----------------
+  function update(dt){
+    if(state!=="playing") return;
+
+    // forward/right vectors derived straight from the mouse-look yaw (flattened, ignores pitch)
+    const fwdX = -Math.sin(yaw), fwdZ = -Math.cos(yaw);
+    const rightX = Math.sin(yaw + Math.PI/2), rightZ = Math.cos(yaw + Math.PI/2);
+
+    let mx=0, mz=0;
+    if(keys["w"]||keys["arrowup"])   { mx += fwdX;   mz += fwdZ; }
+    if(keys["s"]||keys["arrowdown"]) { mx -= fwdX;   mz -= fwdZ; }
+    if(keys["d"]||keys["arrowright"]){ mx += rightX; mz += rightZ; }
+    if(keys["a"]||keys["arrowleft"]) { mx -= rightX; mz -= rightZ; }
+
+    const moving = mx!==0||mz!==0;
+    if(moving){
+      const len=Math.hypot(mx,mz); mx/=len; mz/=len;
+      facing = {x:mx, z:mz};
+      const nx = player.x + mx*player.speed*dt;
+      const nz = player.z + mz*player.speed*dt;
+      if(canMoveTo(nx, player.z, 0.35)) player.x = nx;
+      if(canMoveTo(player.x, nz, 0.35)) player.z = nz;
+      walkPhase += dt*10;
+    }
+    player.cx = Math.floor(player.x/TILE);
+    player.cy = Math.floor(player.z/TILE);
+    player.angle = yaw;
+
+    // pickups
+    for(const p of polaroidsData){
+      if(!p.collected && Math.hypot(p.x-player.x, p.z-player.z) < 0.9){
+        p.collected = true;
+        showMsg("Picked up a polaroid (" + collected() + "/5)");
+        updateHud();
+      }
+    }
+    // switch
+    if(!switchActivated && Math.hypot(gateSwitchData.x-player.x, gateSwitchData.z-player.z) < 1.1){
+      if(collected()===5){
+        switchActivated = true;
+        grid[exitCell.y][exitCell.x] = 3;
+        showMsg("Gate switch activated — exit unlocked!");
+        updateHud();
+      } else if(msgTimer<=0){
+        showMsg("The switch needs all 5 polaroids first (" + collected() + "/5)");
+      }
+    }
+    // exit
+    if(grid[exitCell.y][exitCell.x]===3){
+      if(Math.hypot(worldX(exitCell.x)-player.x, worldZ(exitCell.y)-player.z) < 1.1){
+        triggerWin(); return;
+      }
+    }
+    if(msgTimer>0){ msgTimer-=dt; if(msgTimer<=0) document.getElementById("msgline").style.opacity=0; }
+
+    // monster AI
+    monster.bob += dt*4;
+    monster.cx = Math.floor(monster.x/TILE); monster.cy = Math.floor(monster.z/TILE);
+    const distToPlayer = Math.hypot(monster.x-player.x, monster.z-player.z);
+    const detectRadius = flashlightOn ? 15 : 9;
+    const canSee = distToPlayer < detectRadius;
+    if(canSee) monster.state="chase"; else if(monster.state==="chase" && distToPlayer>detectRadius*1.6) monster.state="wander";
+
+    monster.pathTimer -= dt;
+    if(monster.pathTimer<=0){
+      monster.pathTimer = monster.state==="chase" ? 0.4 : 1.5;
+      if(monster.state==="chase"){
+        monster.path = bfsPath(monster.cx,monster.cy, player.cx, player.cy);
+      } else {
+        const t = randFloorCell({x:monster.cx,y:monster.cy},3);
+        monster.path = bfsPath(monster.cx,monster.cy, t.x, t.y);
+      }
+    }
+    const spd = monster.state==="chase" ? 4.6 : 2.6;
+    if(monster.path && monster.path.length>0){
+      const target = monster.path[0];
+      const tx = worldX(target.x), tz = worldZ(target.y);
+      const mdx = tx-monster.x, mdz = tz-monster.z;
+      const mdist = Math.hypot(mdx,mdz);
+      if(mdist<0.15) monster.path.shift();
+      else { monster.x += (mdx/mdist)*spd*dt; monster.z += (mdz/mdist)*spd*dt; }
+    }
+    monsterGlow.intensity = monster.state==="chase" ? 1.6 : 0.35;
+    monsterGlow.color.set(monster.state==="chase" ? 0xff1010 : 0x551010);
+
+    if(distToPlayer < 0.85){ triggerJumpscare(); }
+
+    // ---------- visuals ----------
+    // player's own body isn't rendered in first-person view (you don't see yourself)
+    player3D.visible = false;
+
+    // monster mesh
+    monster3D.position.set(monster.x, Math.sin(monster.bob)*0.08, monster.z);
+    const mAngle = Math.atan2(player.x-monster.x, player.z-monster.z);
+    monster3D.rotation.y = mAngle;
+    // billboard head: always face the camera directly regardless of body rotation
+    monster3D.userData.head.quaternion.copy(camera.quaternion);
+
+    // polaroids bob/spin
+    polaroidMeshes.forEach((p,i)=>{
+      if(p.data.collected){
+        if(p.mesh.visible){ p.mesh.visible=false; p.light.visible=false; }
+        return;
+      }
+      p.mesh.position.y = 1.1 + Math.sin(walkPhase*0.3+i)*0.08;
+      p.mesh.rotation.y += dt*0.8;
+    });
+
+    // switch glow
+    const orbMat = switchMesh.userData.orbMat;
+    if(switchActivated){
+      orbMat.color.set(0x5fae5f); orbMat.emissive.set(0x5fae5f);
+      switchLight.color.set(0x5fae5f);
+    }
+
+    // gate visual
+    if(grid[exitCell.y][exitCell.x]===3){
+      gateMesh.position.y = THREE.MathUtils.lerp(gateMesh.position.y, -2.3, dt*3);
+      gateMesh.material.emissive.set(0x2f7a2f);
+    } else {
+      gateMesh.material.emissiveIntensity = 0.4 + Math.sin(performance.now()*0.004)*0.2;
+    }
+
+    // ---------- first-person camera: eyes at the player's head, rotated by mouse yaw/pitch ----------
+    const eyeHeight = 1.6;
+    camera.position.set(player.x, eyeHeight, player.z);
+    camera.rotation.order = "YXZ";
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+    camera.rotation.z = 0;
+
+    // flashlight follows the camera exactly — points wherever you're actually looking
+    flashlight.intensity = flashlightOn ? 3.2 : 0;
+    flashlight.position.set(player.x, eyeHeight, player.z);
+    const lookDir = new THREE.Vector3();
+    camera.getWorldDirection(lookDir);
+    flashlight.target.position.set(player.x + lookDir.x*4, eyeHeight + lookDir.y*4, player.z + lookDir.z*4);
+    flashlight.target.updateMatrixWorld();
+  }
+
+  // ---------------- states ----------------
+  function triggerJumpscare(){
+    state="jumpscare";
+    document.getElementById("jumpscareWrap").classList.remove("hidden");
+    document.getElementById("redflash").style.transition="none";
+    document.getElementById("redflash").style.opacity="0.55";
+    screamSfx();
+    setTimeout(()=>{
+      document.getElementById("redflash").style.transition="opacity .6s ease";
+      document.getElementById("redflash").style.opacity="0";
+    },120);
+    setTimeout(()=>{
+      document.getElementById("jumpscareWrap").classList.add("hidden");
+      document.getElementById("hud").classList.add("hidden");
+      document.getElementById("crosshair").classList.add("hidden");
+      document.getElementById("gameover").classList.remove("hidden");
+      state="gameover";
+    },1400);
+  }
+  function triggerWin(){
+    state="win";
+    document.getElementById("hud").classList.add("hidden");
+    document.getElementById("crosshair").classList.add("hidden");
+    document.getElementById("winscreen").classList.remove("hidden");
+  }
+  function startGame(){
+    requestLock(); // must fire synchronously inside the click gesture or browsers will refuse it
+    ensureAudio();
+    document.getElementById("loading").classList.remove("hidden");
+    setTimeout(()=>{
+      setup();
+      document.getElementById("menu").classList.add("hidden");
+      document.getElementById("gameover").classList.add("hidden");
+      document.getElementById("winscreen").classList.add("hidden");
+      document.getElementById("resumeOverlay").classList.add("hidden");
+      document.getElementById("hud").classList.remove("hidden");
+      document.getElementById("crosshair").classList.remove("hidden");
+      document.getElementById("loading").classList.add("hidden");
+      state="playing";
+    }, 60);
+  }
+  document.getElementById("startBtn").addEventListener("click", startGame);
+  document.getElementById("retryBtn").addEventListener("click", startGame);
+  document.getElementById("againBtn").addEventListener("click", startGame);
+
+  // ---------------- loop ----------------
+  function loop(t){
+    if(!lastTime) lastTime=t;
+    const dt = Math.min(0.05,(t-lastTime)/1000);
+    lastTime = t;
+    update(dt);
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+  camera.position.set(4,4,4);
+  requestAnimationFrame(loop);
+
+})();
+</script>
