@@ -80,15 +80,19 @@
   const cursorEl = document.getElementById("lighterCursor");
   const burnCanvas = document.getElementById("burnCanvas");
   const bctx = burnCanvas.getContext("2d");
+  const emberCanvas = document.getElementById("emberCanvas");
+  const ectx = emberCanvas.getContext("2d");
 
-  function sizeBurnCanvas() {
+  function sizeCanvases() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    burnCanvas.width = window.innerWidth * dpr;
-    burnCanvas.height = window.innerHeight * dpr;
-    bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const [canvas, ctx] of [[burnCanvas, bctx], [emberCanvas, ectx]]) {
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
   }
-  sizeBurnCanvas();
-  window.addEventListener("resize", sizeBurnCanvas);
+  sizeCanvases();
+  window.addEventListener("resize", sizeCanvases);
 
   let isLit = false;
   let lastBurnX = null;
@@ -108,38 +112,100 @@
     return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
   }
 
-  // stamp one scorch mark: outer singe, mid char, dark core
+  // an irregular (not perfectly round) blob path — real char marks aren't circles
+  function blobPath(ctx, cx, cy, baseR, jag, points) {
+    const angleStep = (Math.PI * 2) / points;
+    ctx.beginPath();
+    for (let i = 0; i <= points; i++) {
+      const a = i * angleStep;
+      const r = baseR * (1 - jag / 2 + Math.random() * jag);
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r * 0.9; // slightly flattened, paper-scorch style
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  // one scorch stamp: wide soft singe (multiplies into the paper color),
+  // a ragged dark char ring, a near-black burnt-through core, and a few
+  // thin radiating fiber cracks — this is what gets baked permanently
+  // into the burn canvas.
   function burnAt(x, y) {
-    const jitter = () => (Math.random() - 0.5) * 6;
-    const cx = x + jitter();
-    const cy = y + jitter();
+    const cx = x + (Math.random() - 0.5) * 4;
+    const cy = y + (Math.random() - 0.5) * 4;
 
+    bctx.save();
+    bctx.globalCompositeOperation = "multiply";
+    bctx.fillStyle = "rgba(120, 60, 20, 0.22)";
+    blobPath(bctx, cx, cy, 20 + Math.random() * 8, 0.7, 10);
+    bctx.fill();
+
+    bctx.fillStyle = "rgba(70, 32, 12, 0.5)";
+    blobPath(bctx, cx, cy, 12 + Math.random() * 5, 0.8, 9);
+    bctx.fill();
+    bctx.restore();
+
+    bctx.save();
     bctx.globalCompositeOperation = "source-over";
-
-    bctx.beginPath();
-    bctx.fillStyle = "rgba(90, 50, 20, 0.16)";
-    bctx.arc(cx, cy, 16 + Math.random() * 6, 0, Math.PI * 2);
+    bctx.fillStyle = "rgba(18, 9, 5, 0.88)";
+    blobPath(bctx, cx, cy, 5.5 + Math.random() * 3, 0.9, 8);
     bctx.fill();
 
-    bctx.beginPath();
-    bctx.fillStyle = "rgba(40, 20, 8, 0.45)";
-    bctx.arc(cx, cy, 9 + Math.random() * 4, 0, Math.PI * 2);
-    bctx.fill();
-
-    bctx.beginPath();
-    bctx.fillStyle = "rgba(8, 4, 2, 0.9)";
-    bctx.arc(cx, cy, 4 + Math.random() * 2.5, 0, Math.PI * 2);
-    bctx.fill();
+    // fiber cracks radiating from the core
+    bctx.strokeStyle = "rgba(35, 16, 6, 0.5)";
+    bctx.lineCap = "round";
+    const cracks = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < cracks; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const len = 8 + Math.random() * 14;
+      bctx.lineWidth = 0.6 + Math.random() * 1;
+      bctx.beginPath();
+      bctx.moveTo(cx + Math.cos(a) * 4, cy + Math.sin(a) * 4);
+      bctx.lineTo(cx + Math.cos(a) * (4 + len), cy + Math.sin(a) * (4 + len));
+      bctx.stroke();
+    }
+    bctx.restore();
   }
 
   function burnAlong(x0, y0, x1, y1) {
     const dist = Math.hypot(x1 - x0, y1 - y0);
-    const steps = Math.max(1, Math.floor(dist / 5));
+    const steps = Math.max(1, Math.floor(dist / 6));
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       burnAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
     }
   }
+
+  // glowing ember layer: fades every frame instead of accumulating,
+  // so the flame glow trails and dies out instead of leaving hard dots
+  function emberLoop() {
+    const w = emberCanvas.width / (Math.min(window.devicePixelRatio || 1, 2));
+    const h = emberCanvas.height / (Math.min(window.devicePixelRatio || 1, 2));
+
+    ectx.globalCompositeOperation = "destination-out";
+    ectx.fillStyle = "rgba(0, 0, 0, 0.15)";
+    ectx.fillRect(0, 0, w, h);
+
+    if (isLit && withinPoster(pointerX, pointerY)) {
+      ectx.globalCompositeOperation = "lighter";
+      const flicker = 12 + Math.sin(Date.now() / 45) * 3 + Math.random() * 3;
+      const grad = ectx.createRadialGradient(
+        pointerX, pointerY, 0,
+        pointerX, pointerY, flicker
+      );
+      grad.addColorStop(0, "rgba(255, 240, 180, 0.9)");
+      grad.addColorStop(0.35, "rgba(255, 140, 30, 0.7)");
+      grad.addColorStop(1, "rgba(200, 50, 0, 0)");
+      ectx.fillStyle = grad;
+      ectx.beginPath();
+      ectx.arc(pointerX, pointerY, flicker, 0, Math.PI * 2);
+      ectx.fill();
+    }
+
+    requestAnimationFrame(emberLoop);
+  }
+  requestAnimationFrame(emberLoop);
 
   let idleBurnTimer = null;
 
@@ -151,7 +217,7 @@
     if (withinPoster(pointerX, pointerY)) burnAt(pointerX, pointerY);
     idleBurnTimer = window.setInterval(() => {
       if (isLit && withinPoster(pointerX, pointerY)) burnAt(pointerX, pointerY);
-    }, 90);
+    }, 110);
   }
 
   function extinguish() {
