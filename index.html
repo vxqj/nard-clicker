@@ -1,4 +1,4 @@
-<!-- Nathan's Maze — 3D low-poly horror game -->
+<!-- Nard's Maze — 3D low-poly horror game (v2) -->
 <style>
   :root{
     --bg:#050505;
@@ -14,25 +14,27 @@
   #three-canvas{ display:block; width:100%; height:100%; cursor:crosshair; }
   .overlay{
     position:absolute; inset:0; display:flex;flex-direction:column;align-items:center;justify-content:center;
-    text-align:center; background:rgba(0,0,0,0.9); z-index:20; padding:20px;
+    text-align:center; background:rgba(0,0,0,0.9); z-index:20; padding:16px;
+    overflow-y:auto; max-height:100vh;
   }
   .hidden{display:none !important;}
   h1.title{
-    font-size:clamp(30px,6vw,58px); letter-spacing:6px; color:var(--accent);
+    font-size:clamp(24px,5.5vw,58px); letter-spacing:5px; color:var(--accent);
     text-shadow:0 0 18px rgba(198,40,40,0.7),0 0 40px rgba(198,40,40,0.3);
-    margin:0 0 6px 0; font-weight:900; text-transform:uppercase;
+    margin:0 0 4px 0; font-weight:900; text-transform:uppercase;
   }
-  .subtitle{ color:var(--dim); letter-spacing:3px; font-size:13px; margin-bottom:24px; text-transform:uppercase; }
+  .subtitle{ color:var(--dim); letter-spacing:2.5px; font-size:11px; margin-bottom:14px; text-transform:uppercase; }
   .panel{
-    border:1px solid var(--line); background:rgba(20,8,8,0.55); padding:16px 24px; max-width:520px;
-    margin-bottom:22px; text-align:left; font-size:13px; line-height:1.7; color:var(--text);
+    border:1px solid var(--line); background:rgba(20,8,8,0.55); padding:12px 16px;
+    max-width:min(480px,88vw); width:100%; margin-bottom:16px; text-align:left;
+    font-size:11.5px; line-height:1.5; color:var(--text);
   }
   .panel b{color:var(--accent);}
-  .key{ display:inline-block;border:1px solid var(--dim);border-radius:3px;padding:1px 7px;margin:0 2px;
-    font-size:11px;color:var(--text);background:#1a1414; }
+  .key{ display:inline-block;border:1px solid var(--dim);border-radius:3px;padding:1px 6px;margin:0 1px;
+    font-size:10px;color:var(--text);background:#1a1414; }
   button.btn{
-    background:transparent;border:1px solid var(--accent);color:var(--accent);padding:12px 34px;
-    font-family:inherit;letter-spacing:3px;font-size:14px;cursor:pointer;text-transform:uppercase;transition:all .15s ease;
+    background:transparent;border:1px solid var(--accent);color:var(--accent);padding:10px 28px;
+    font-family:inherit;letter-spacing:3px;font-size:13px;cursor:pointer;text-transform:uppercase;transition:all .15s ease;
   }
   button.btn:hover{ background:var(--accent);color:#0a0000;box-shadow:0 0 24px rgba(198,40,40,0.6); }
   #hud{ position:absolute; top:14px; left:14px; z-index:10; pointer-events:none; user-select:none; }
@@ -41,10 +43,17 @@
   #objectives .oline{ margin:3px 0; color:var(--dim); }
   #objectives .oline.done{ color:#7a9a6b; text-decoration:line-through; }
   #flash-status{ margin-top:8px; font-size:11px; color:var(--dim); letter-spacing:1px; }
+  #map-hint{ margin-top:2px; font-size:11px; color:var(--dim); letter-spacing:1px; }
   #crosshair{
     position:absolute; top:50%; left:50%; width:5px; height:5px; margin:-2px 0 0 -2px;
     background:rgba(255,255,255,0.35); border-radius:50%; z-index:9; pointer-events:none;
   }
+  #minimapWrap{
+    position:absolute; top:14px; right:14px; z-index:10; pointer-events:none; user-select:none;
+    width:140px; height:140px; border-radius:50%; overflow:hidden;
+    border:2px solid var(--line); background:rgba(5,2,2,0.88); box-shadow:0 0 18px rgba(0,0,0,0.7), inset 0 0 20px rgba(0,0,0,0.6);
+  }
+  #minimap{ display:block; width:100%; height:100%; }
   #jumpscareWrap{ background:#000; padding:0; }
   #jumpscare{ position:absolute; inset:0; z-index:30; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
   #jumpscare img{ width:42%; filter:contrast(1.3) saturate(1.1); animation:jscare .35s ease-out forwards; }
@@ -56,6 +65,8 @@
     opacity:0; transition:opacity .3s ease; z-index:10; white-space:nowrap;
   }
   #loading{ position:absolute; inset:0; z-index:25; display:flex; align-items:center; justify-content:center; background:#000; color:var(--dim); letter-spacing:3px; font-size:13px; }
+  #fullmapOverlay{ z-index:22; background:rgba(0,0,0,0.94); }
+  #fullmapCanvas{ border:1px solid var(--line); box-shadow:0 0 30px rgba(198,40,40,0.15); background:#000; image-rendering:pixelated; }
 </style>
 
 <div id="wrap">
@@ -70,12 +81,23 @@
       <div class="oline" id="obj-switch">Reach the gate switch</div>
       <div class="oline" id="obj-exit">Escape through the exit</div>
       <div id="flash-status">flashlight: OFF &mdash; press F to toggle</div>
+      <div id="map-hint">press M for the full map</div>
     </div>
   </div>
 
+  <div id="minimapWrap" class="hidden"><canvas id="minimap" width="140" height="140"></canvas></div>
+
   <div id="msgline"></div>
 
-  <div id="loading" class="hidden">building the maze...</div>
+  <div id="loading" class="hidden">carving a massive maze...</div>
+
+  <div id="fullmapOverlay" class="overlay hidden">
+    <div class="subtitle" style="margin-bottom:10px;">the full map &mdash; press M to close</div>
+    <canvas id="fullmapCanvas"></canvas>
+    <div style="color:var(--dim);font-size:11px;margin-top:12px;letter-spacing:1px;max-width:440px;">
+      the exit isn't marked &mdash; you'll know it when you see it. and he doesn't stop hunting while you're reading this.
+    </div>
+  </div>
 
   <div id="resumeOverlay" class="overlay hidden" style="background:rgba(0,0,0,0.75);z-index:15;">
     <div class="subtitle" style="margin-bottom:14px;">paused</div>
@@ -83,19 +105,20 @@
   </div>
 
   <div id="menu" class="overlay">
-    <h1 class="title">Nathan's Maze</h1>
+    <h1 class="title">Nard's Maze</h1>
     <div class="subtitle">he doesn't want you to leave</div>
     <div class="panel">
-      Somebody dragged you into a low-lit maze built from Nathan's worst memories.
-      Something wearing <b>his face</b> lives in here now, and it isn't friendly.<br><br>
+      Somebody dragged you into a sprawling, lightless maze built from Nard's worst memories.
+      It is enormous &mdash; finding the way out will take a while. Something wearing <b>his face</b> lives in here now, and it isn't friendly.<br><br>
       &bull; Move with <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> or the <span class="key">Arrow Keys</span><br>
       &bull; Move your <b>mouse</b> to look around, first-person style<br>
       &bull; Press <span class="key">F</span> to toggle your flashlight &mdash; it helps you see, but it also helps <b>him</b> see you<br>
+      &bull; Press <span class="key">M</span> to check the full map &mdash; the exit is never marked on it<br>
       &bull; Collect all <b>5 polaroids</b> hidden in the maze<br>
       &bull; Find the <b>gate switch</b> to unlock the exit<br>
       &bull; Reach the <b>exit</b> before he reaches you<br><br>
       If he catches you, it's over.<br><br>
-      <span style="color:var(--dim);font-size:11px;">Clicking "Enter the maze" will try to lock your mouse cursor for smoother looking. If your browser blocks that (some embedded previews do), looking around still works — the cursor just stays visible.</span>
+      <span style="color:var(--dim);font-size:11px;">Clicking "Enter the maze" will try to lock your mouse cursor for smoother looking, and will start audio (turn your volume down a little first). If your browser blocks pointer lock, looking around still works.</span>
     </div>
     <button class="btn" id="startBtn">Enter the maze</button>
   </div>
@@ -106,13 +129,13 @@
 
   <div id="gameover" class="overlay hidden">
     <h1 class="title" style="color:#8a1c1c;">Caught</h1>
-    <div class="subtitle">Nathan found you.</div>
+    <div class="subtitle">Nard found you.</div>
     <button class="btn" id="retryBtn">Try again</button>
   </div>
 
   <div id="winscreen" class="overlay hidden">
     <h1 class="title" style="color:#7a9a6b;text-shadow:0 0 18px rgba(120,180,100,0.5);">You Escaped</h1>
-    <div class="subtitle">Nathan is still in there. Somewhere.</div>
+    <div class="subtitle">Nard is still in there. Somewhere.</div>
     <button class="btn" id="againBtn">Play again</button>
   </div>
 </div>
@@ -127,26 +150,38 @@
   document.getElementById("jsimg").src = JUMPSCARE_IMG_URL;
 
   // ---------------- maze ----------------
-  const COLS = 31, ROWS = 23; // odd
+  // Tune these two to control how "fucking massive" it is. Both must stay ODD.
+  // 101x75 is already ~10x the cell count of the original 31x23 maze.
+  // Push higher (e.g. 141x105) for an even bigger crawl if your machine can take it.
+  const COLS = 101, ROWS = 75;
   const TILE = 4;
   let grid;
 
   function genMaze(){
     grid = [];
     for(let y=0;y<ROWS;y++) grid.push(new Array(COLS).fill(1));
-    function carve(cx,cy){
-      grid[cy][cx]=0;
+    // iterative randomized depth-first backtracker — avoids call-stack overflow on huge mazes
+    grid[1][1] = 0;
+    const stack = [[1,1]];
+    while(stack.length){
+      const [cx,cy] = stack[stack.length-1];
       const dirs = shuffle([[2,0],[-2,0],[0,2],[0,-2]]);
+      let carved = false;
       for(const [dx,dy] of dirs){
         const nx=cx+dx, ny=cy+dy;
         if(nx>0&&nx<COLS-1&&ny>0&&ny<ROWS-1&&grid[ny][nx]===1){
           grid[cy+dy/2][cx+dx/2]=0;
-          carve(nx,ny);
+          grid[ny][nx]=0;
+          stack.push([nx,ny]);
+          carved = true;
+          break;
         }
       }
+      if(!carved) stack.pop();
     }
-    carve(1,1);
-    for(let i=0;i<8;i++){
+    // scatter open rooms for variety, scaled to maze size
+    const roomCount = Math.floor((COLS*ROWS)/450);
+    for(let i=0;i<roomCount;i++){
       const rx=2+Math.floor(Math.random()*(COLS-6));
       const ry=2+Math.floor(Math.random()*(ROWS-6));
       const rw=2+Math.floor(Math.random()*3), rh=2+Math.floor(Math.random()*3);
@@ -157,7 +192,7 @@
   function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
   function randFloorCell(minDistFrom,minDist){
     let tries=0;
-    while(tries<4000){
+    while(tries<20000){
       tries++;
       const x=1+Math.floor(Math.random()*(COLS-2)), y=1+Math.floor(Math.random()*(ROWS-2));
       if(grid[y][x]===0){
@@ -384,42 +419,29 @@
   const player3D = buildHumanoid({skin:0xd8b48c, shirt:0x2e3a4e, pants:0x22221f});
   scene.add(player3D);
 
-  // ---------------- monster ----------------
-  let monsterHeadMat, monsterGlow;
+  // ---------------- monster: a big billboarded picture of a face ----------------
+  let monsterFaceMat, monsterGlow;
   function buildMonster(){
     const root = new THREE.Group();
 
-    const torsoGeo = new THREE.CylinderGeometry(0.32,0.42,1.1,8);
-    const torsoMat = new THREE.MeshStandardMaterial({color:0x120404, roughness:0.95});
-    const torso = new THREE.Mesh(torsoGeo, torsoMat);
-    torso.position.y = 1.15;
-    torso.castShadow = true;
-    root.add(torso);
+    // placeholder aspect ratio until the real image loads and we resize this
+    const placeholderGeo = new THREE.PlaneGeometry(1.7, 2.4);
+    monsterFaceMat = new THREE.MeshBasicMaterial({color:0x220000, transparent:true, side:THREE.DoubleSide, depthWrite:false});
+    const face = new THREE.Mesh(placeholderGeo, monsterFaceMat);
+    face.position.y = 1.5;
+    root.add(face);
+    root.userData.face = face;
 
-    function limb(len, radius){
-      const geo = new THREE.CylinderGeometry(radius*0.6, radius, len, 6);
-      const mat = new THREE.MeshStandardMaterial({color:0x0e0303, roughness:0.95});
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.castShadow = true;
-      return mesh;
-    }
-    const armL = limb(0.9,0.07); armL.position.set(-0.42,1.2,0.05); armL.rotation.z = 0.5;
-    const armR = limb(0.9,0.07); armR.position.set(0.42,1.2,0.05); armR.rotation.z = -0.5;
-    root.add(armL); root.add(armR);
-    const legL = limb(0.9,0.1); legL.position.set(-0.16,0.5,0);
-    const legR = limb(0.9,0.1); legR.position.set(0.16,0.5,0);
-    root.add(legL); root.add(legR);
+    // dark contact shadow so it doesn't look like it's floating
+    const blobGeo = new THREE.CircleGeometry(0.55,16);
+    const blobMat = new THREE.MeshBasicMaterial({color:0x000000, transparent:true, opacity:0.55});
+    const blob = new THREE.Mesh(blobGeo, blobMat);
+    blob.rotation.x = -Math.PI/2;
+    blob.position.y = 0.02;
+    root.add(blob);
 
-    // billboard face — placeholder material until texture loads
-    const headGeo = new THREE.PlaneGeometry(1.15,1.15);
-    monsterHeadMat = new THREE.MeshBasicMaterial({color:0x330000, transparent:true, side:THREE.DoubleSide, depthWrite:false});
-    const head = new THREE.Mesh(headGeo, monsterHeadMat);
-    head.position.y = 1.95;
-    root.add(head);
-    root.userData.head = head;
-
-    monsterGlow = new THREE.PointLight(0xff2020, 0, 6);
-    monsterGlow.position.y = 1.9;
+    monsterGlow = new THREE.PointLight(0xff2020, 0, 7);
+    monsterGlow.position.y = 1.7;
     root.add(monsterGlow);
 
     return root;
@@ -427,7 +449,8 @@
   const monster3D = buildMonster();
   scene.add(monster3D);
 
-  // load the face texture for the monster's head — with a safe fallback if the host blocks CORS
+  // load the face texture — with a safe fallback if the host blocks CORS — and size the
+  // plane to the image's real aspect ratio so it reads as a big picture, not a stretched blob
   function proceduralFaceTexture(){
     const c=document.createElement("canvas"); c.width=128;c.height=128;
     const g=c.getContext("2d");
@@ -440,29 +463,40 @@
     g.beginPath(); g.moveTo(30,95); for(let x=30;x<=98;x+=8){ g.lineTo(x, 95 + (((x/8)|0)%2?10:0)); } g.stroke();
     return new THREE.CanvasTexture(c);
   }
+  function resizeMonsterFace(aspect){
+    const h = 2.7, w = h*aspect; // big — meant to loom
+    const face = monster3D.userData.face;
+    face.geometry.dispose();
+    face.geometry = new THREE.PlaneGeometry(w,h);
+    face.position.y = h/2 + 0.05;
+    monsterGlow.position.y = h*0.65;
+  }
   function loadMonsterTexture(){
     const img = new Image();
     img.crossOrigin = "anonymous";
     let settled = false;
     const fallback = ()=>{
       if(settled) return; settled = true;
-      monsterHeadMat.map = proceduralFaceTexture();
-      monsterHeadMat.color.set(0xffffff);
-      monsterHeadMat.needsUpdate = true;
+      monsterFaceMat.map = proceduralFaceTexture();
+      monsterFaceMat.color.set(0xffffff);
+      monsterFaceMat.needsUpdate = true;
+      resizeMonsterFace(1);
     };
     img.onload = ()=>{
       if(settled) return; settled = true;
       try{
         const tex = new THREE.Texture(img);
         tex.needsUpdate = true;
-        monsterHeadMat.map = tex;
-        monsterHeadMat.color.set(0xffffff);
-        monsterHeadMat.needsUpdate = true;
+        monsterFaceMat.map = tex;
+        monsterFaceMat.color.set(0xffffff);
+        monsterFaceMat.needsUpdate = true;
+        const aspect = (img.naturalWidth && img.naturalHeight) ? img.naturalWidth/img.naturalHeight : 1;
+        resizeMonsterFace(aspect);
       }catch(e){ fallback(); }
     };
     img.onerror = fallback;
     img.src = MONSTER_IMG_URL;
-    setTimeout(fallback, 4000); // never leave the head blank
+    setTimeout(fallback, 4000); // never leave the face blank
   }
   loadMonsterTexture();
 
@@ -470,6 +504,7 @@
   let state="menu";
   let player = {x:0,z:0,cx:1,cy:1,angle:0,speed:6.2};
   let monster = {x:0,z:0,cx:1,cy:1,state:"wander",path:[],pathTimer:0,speed:3.2,bob:0};
+  let prevMonsterState = "wander";
   let polaroidsData=[], gateSwitchData=null, exitCell=null;
   let flashlightOn=false, switchActivated=false;
   let facing={x:0,z:1};
@@ -496,7 +531,6 @@
       if(cx<0||cy<0||cx>=COLS||cy>=ROWS) return false;
       const v = grid[cy][cx];
       if(v===1) return false;
-      if(v===2) return false;
     }
     return true;
   }
@@ -505,7 +539,7 @@
     const visited = new Set(); const key=(x,y)=>x+","+y;
     const q=[{x:sx,y:sy,path:[]}]; visited.add(key(sx,sy));
     let iter=0;
-    while(q.length && iter<5000){
+    while(q.length && iter<200000){
       iter++;
       const cur=q.shift();
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
@@ -522,6 +556,96 @@
     return [];
   }
 
+  // ---------------- minimap + full map ----------------
+  const minimapCanvas = document.getElementById("minimap");
+  const minimapCtx = minimapCanvas.getContext("2d");
+  const fullmapCanvas = document.getElementById("fullmapCanvas");
+  let fullMapBase = null;
+  let showFullMap = false;
+
+  function buildFullMapBase(){
+    const cell = 3;
+    const off = document.createElement("canvas");
+    off.width = COLS*cell; off.height = ROWS*cell;
+    const octx = off.getContext("2d");
+    octx.fillStyle = "#000"; octx.fillRect(0,0,off.width,off.height);
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        // deliberately NOT distinguishing the exit cell here — it must not be revealed
+        octx.fillStyle = grid[y][x]===1 ? "#3a1414" : "#171010";
+        octx.fillRect(x*cell, y*cell, cell, cell);
+      }
+    }
+    octx.fillStyle = "#7a9a6b";
+    octx.fillRect(1*cell, 1*cell, cell*2, cell*2);
+    fullMapBase = off;
+  }
+  function toggleFullMap(){
+    showFullMap = !showFullMap;
+    const overlay = document.getElementById("fullmapOverlay");
+    if(showFullMap){
+      if(!fullMapBase) buildFullMapBase();
+      const maxW = Math.min(window.innerWidth*0.86, 900);
+      const maxH = Math.min(window.innerHeight*0.66, 700);
+      const scale = Math.min(maxW/fullMapBase.width, maxH/fullMapBase.height, 1);
+      fullmapCanvas.width = fullMapBase.width; fullmapCanvas.height = fullMapBase.height;
+      fullmapCanvas.style.width = (fullMapBase.width*scale)+"px";
+      fullmapCanvas.style.height = (fullMapBase.height*scale)+"px";
+      overlay.classList.remove("hidden");
+    } else {
+      overlay.classList.add("hidden");
+    }
+  }
+  function drawFullMapFrame(){
+    if(!showFullMap || !fullMapBase) return;
+    const ctx = fullmapCanvas.getContext("2d");
+    ctx.drawImage(fullMapBase,0,0);
+    const cell = 3;
+    ctx.fillStyle="#c62828";
+    ctx.beginPath();
+    ctx.arc((player.x/TILE)*cell, (player.z/TILE)*cell, 5, 0, Math.PI*2);
+    ctx.fill();
+  }
+  function drawMinimap(){
+    const size = minimapCanvas.width;
+    const ctx = minimapCtx;
+    ctx.clearRect(0,0,size,size);
+    ctx.fillStyle = "#050202";
+    ctx.fillRect(0,0,size,size);
+    const radiusTiles = 11;
+    const cellPx = size/(radiusTiles*2);
+    const pcx = player.x/TILE, pcz = player.z/TILE;
+    for(let dy=-radiusTiles; dy<=radiusTiles; dy++){
+      for(let dx=-radiusTiles; dx<=radiusTiles; dx++){
+        const gx = Math.floor(pcx+dx), gy=Math.floor(pcz+dy);
+        if(gx<0||gy<0||gx>=COLS||gy>=ROWS) continue;
+        if(grid[gy][gx]===1) continue;
+        ctx.fillStyle = "#241616";
+        const px = size/2 + dx*cellPx - cellPx/2;
+        const py = size/2 + dy*cellPx - cellPx/2;
+        ctx.fillRect(px,py,cellPx,cellPx);
+      }
+    }
+    ctx.save();
+    ctx.translate(size/2, size/2);
+    ctx.rotate(yaw);
+    ctx.fillStyle = "#c62828";
+    ctx.beginPath();
+    ctx.moveTo(0,-6); ctx.lineTo(4,5); ctx.lineTo(-4,5); ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // only reveals the monster when it's actively hunting you — that's the point
+    if(monster.state==="chase"){
+      const mdx = (monster.x-player.x)/TILE, mdz = (monster.z-player.z)/TILE;
+      if(Math.abs(mdx)<=radiusTiles && Math.abs(mdz)<=radiusTiles){
+        ctx.fillStyle = "#ff2020";
+        ctx.beginPath();
+        ctx.arc(size/2+mdx*cellPx, size/2+mdz*cellPx, 4, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+
   function setup(){
     genMaze();
     const start = {x:1,y:1};
@@ -531,21 +655,22 @@
 
     polaroidsData = [];
     for(let i=0;i<5;i++){
-      const c = randFloorCell(start,7);
+      const c = randFloorCell(start,10);
       polaroidsData.push({x:worldX(c.x), z:worldZ(c.y), cx:c.x, cy:c.y, collected:false});
     }
-    const sc = randFloorCell(start,9);
+    const sc = randFloorCell(start,14);
     gateSwitchData = {x:worldX(sc.x), z:worldZ(sc.y), cx:sc.x, cy:sc.y};
     switchActivated = false;
 
-    const ec = randFloorCell(start,12);
+    const ec = randFloorCell(start,30);
     exitCell = ec;
     grid[ec.y][ec.x] = 2;
 
-    const mc = randFloorCell(start,8);
+    const mc = randFloorCell(start,12);
     monster.x = worldX(mc.x); monster.z = worldZ(mc.y);
     monster.cx = mc.x; monster.cy = mc.y;
     monster.state = "wander"; monster.path = []; monster.pathTimer = 0;
+    prevMonsterState = "wander";
 
     // rebuild scene geometry
     if(mazeGroup) scene.remove(mazeGroup);
@@ -562,6 +687,10 @@
     flashlightOn = false;
     updateHud();
 
+    fullMapBase = null;
+    showFullMap = false;
+    document.getElementById("fullmapOverlay").classList.add("hidden");
+    buildFullMapBase();
   }
 
   // ---------------- input ----------------
@@ -574,6 +703,9 @@
       flashlightOn = !flashlightOn;
       updateHud();
       ensureAudio();
+    }
+    if(k==="m" && state==="playing"){
+      toggleFullMap();
     }
   }, {passive:false});
   window.addEventListener("keyup", e=>{
@@ -621,15 +753,101 @@
     if(pitch < -limit) pitch = -limit;
   });
 
-
-  let actx=null;
+  // ---------------- procedural creepy audio ----------------
+  // Real hotlinked horror SFX turned out to be a dead end: most free libraries (Mixkit,
+  // Pixabay, itch.io packs) only expose their download via a JS button click or a paid
+  // zip, not a stable direct CDN URL you can drop in <audio src>. Hotlinking whatever URL
+  // I could scrape would risk silently breaking (dead link / CORS block) with no fallback.
+  // So instead this is all synthesized live with the Web Audio API: a low detuned drone,
+  // randomized whisper/creak bursts, a heartbeat that speeds up and gets louder the closer
+  // and more actively Nard is hunting you, a growl on the wander→chase transition, and a
+  // beefed-up jumpscare stinger. Bonus: it reacts to gameplay state, which a static mp3 can't.
+  let actx=null, masterGain=null, whisperTimer=null, heartbeatTimer=null;
+  function noiseBurst(duration, freq, gainAmt, q){
+    if(!actx) return;
+    const bufferSize = Math.floor(actx.sampleRate*duration);
+    const buffer = actx.createBuffer(1, bufferSize, actx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0;i<bufferSize;i++) data[i] = Math.random()*2-1;
+    const src = actx.createBufferSource(); src.buffer = buffer;
+    const bp = actx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=freq; bp.Q.value=q||1.2;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0, actx.currentTime);
+    g.gain.linearRampToValueAtTime(gainAmt, actx.currentTime+duration*0.3);
+    g.gain.linearRampToValueAtTime(0, actx.currentTime+duration);
+    src.connect(bp).connect(g);
+    if(actx.createStereoPanner){
+      const pan = actx.createStereoPanner();
+      pan.pan.value = Math.random()*2-1;
+      g.connect(pan); pan.connect(masterGain);
+    } else {
+      g.connect(masterGain);
+    }
+    src.start(); src.stop(actx.currentTime+duration+0.05);
+  }
+  function scheduleWhisper(){
+    const delay = 6000+Math.random()*9000;
+    whisperTimer = setTimeout(()=>{
+      if(state==="playing"){
+        const freq = 220+Math.random()*550;
+        noiseBurst(1.0+Math.random()*1.2, freq, 0.045+Math.random()*0.05, 0.9+Math.random());
+      }
+      scheduleWhisper();
+    }, delay);
+  }
+  function heartbeatThump(vol){
+    if(!actx) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(); o.type="sine";
+    const g = actx.createGain();
+    o.frequency.setValueAtTime(58,t);
+    o.frequency.exponentialRampToValueAtTime(28,t+0.16);
+    g.gain.setValueAtTime(vol,t);
+    g.gain.exponentialRampToValueAtTime(0.001,t+0.24);
+    o.connect(g).connect(masterGain);
+    o.start(t); o.stop(t+0.26);
+  }
+  function scheduleHeartbeat(){
+    const chasing = state==="playing" && monster.state==="chase";
+    const interval = chasing ? 480 : 1400;
+    heartbeatTimer = setTimeout(()=>{
+      if(state==="playing"){
+        const dist = Math.hypot(monster.x-player.x, monster.z-player.z);
+        const vol = chasing ? Math.min(0.34, Math.max(0.08, 0.34 - dist*0.012)) : 0.05;
+        heartbeatThump(vol);
+        setTimeout(()=>heartbeatThump(vol*0.65), 150);
+      }
+      scheduleHeartbeat();
+    }, interval);
+  }
+  function growlSfx(){
+    if(!actx) return;
+    const t=actx.currentTime;
+    const o=actx.createOscillator(); o.type="sawtooth";
+    o.frequency.setValueAtTime(95,t);
+    o.frequency.linearRampToValueAtTime(52,t+0.8);
+    const g=actx.createGain();
+    g.gain.setValueAtTime(0.001,t);
+    g.gain.linearRampToValueAtTime(0.14,t+0.15);
+    g.gain.linearRampToValueAtTime(0.001,t+0.9);
+    o.connect(g).connect(masterGain);
+    o.start(t); o.stop(t+0.95);
+    noiseBurst(0.5, 700, 0.05, 2.2);
+  }
   function ensureAudio(){
     if(actx) return;
     try{
       actx = new (window.AudioContext||window.webkitAudioContext)();
-      const osc = actx.createOscillator(); const g = actx.createGain();
-      g.gain.value=0.018; osc.type="sawtooth"; osc.frequency.value=44;
-      osc.connect(g).connect(actx.destination); osc.start();
+      masterGain = actx.createGain(); masterGain.gain.value = 0.9; masterGain.connect(actx.destination);
+
+      const droneGain = actx.createGain(); droneGain.gain.value = 0.022; droneGain.connect(masterGain);
+      const o1 = actx.createOscillator(); o1.type="sawtooth"; o1.frequency.value=42;
+      const o2 = actx.createOscillator(); o2.type="sine"; o2.frequency.value=46.5; // slight beat/detune for unease
+      o1.connect(droneGain); o2.connect(droneGain);
+      o1.start(); o2.start();
+
+      scheduleWhisper();
+      scheduleHeartbeat();
     }catch(e){}
   }
   function screamSfx(){
@@ -641,8 +859,9 @@
     o.frequency.exponentialRampToValueAtTime(60,actx.currentTime+0.6);
     g.gain.setValueAtTime(0.28,actx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001,actx.currentTime+0.9);
-    o.connect(g).connect(actx.destination);
+    o.connect(g).connect(masterGain);
     o.start(); o.stop(actx.currentTime+0.9);
+    noiseBurst(0.7, 1500, 0.12, 1.5);
   }
 
   // ---------------- update ----------------
@@ -707,6 +926,8 @@
     const detectRadius = flashlightOn ? 15 : 9;
     const canSee = distToPlayer < detectRadius;
     if(canSee) monster.state="chase"; else if(monster.state==="chase" && distToPlayer>detectRadius*1.6) monster.state="wander";
+    if(monster.state==="chase" && prevMonsterState!=="chase") growlSfx();
+    prevMonsterState = monster.state;
 
     monster.pathTimer -= dt;
     if(monster.pathTimer<=0){
@@ -736,12 +957,9 @@
     // player's own body isn't rendered in first-person view (you don't see yourself)
     player3D.visible = false;
 
-    // monster mesh
+    // monster mesh — position + gentle bob; the face plane billboards to the camera every frame
     monster3D.position.set(monster.x, Math.sin(monster.bob)*0.08, monster.z);
-    const mAngle = Math.atan2(player.x-monster.x, player.z-monster.z);
-    monster3D.rotation.y = mAngle;
-    // billboard head: always face the camera directly regardless of body rotation
-    monster3D.userData.head.quaternion.copy(camera.quaternion);
+    monster3D.userData.face.quaternion.copy(camera.quaternion);
 
     // polaroids bob/spin
     polaroidMeshes.forEach((p,i)=>{
@@ -783,6 +1001,9 @@
     camera.getWorldDirection(lookDir);
     flashlight.target.position.set(player.x + lookDir.x*4, eyeHeight + lookDir.y*4, player.z + lookDir.z*4);
     flashlight.target.updateMatrixWorld();
+
+    drawMinimap();
+    drawFullMapFrame();
   }
 
   // ---------------- states ----------------
@@ -800,6 +1021,8 @@
       document.getElementById("jumpscareWrap").classList.add("hidden");
       document.getElementById("hud").classList.add("hidden");
       document.getElementById("crosshair").classList.add("hidden");
+      document.getElementById("minimapWrap").classList.add("hidden");
+      document.getElementById("fullmapOverlay").classList.add("hidden");
       document.getElementById("gameover").classList.remove("hidden");
       state="gameover";
     },1400);
@@ -808,6 +1031,8 @@
     state="win";
     document.getElementById("hud").classList.add("hidden");
     document.getElementById("crosshair").classList.add("hidden");
+    document.getElementById("minimapWrap").classList.add("hidden");
+    document.getElementById("fullmapOverlay").classList.add("hidden");
     document.getElementById("winscreen").classList.remove("hidden");
   }
   function startGame(){
@@ -822,6 +1047,7 @@
       document.getElementById("resumeOverlay").classList.add("hidden");
       document.getElementById("hud").classList.remove("hidden");
       document.getElementById("crosshair").classList.remove("hidden");
+      document.getElementById("minimapWrap").classList.remove("hidden");
       document.getElementById("loading").classList.add("hidden");
       state="playing";
     }, 60);
