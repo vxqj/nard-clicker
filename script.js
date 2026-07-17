@@ -6,6 +6,28 @@
   document.getElementById("cautionText").textContent = CONFIG.caution;
   document.title = "WANTED — " + CONFIG.name;
 
+  // ── Torn paper edge, built as a clip-path so it can only ever affect
+  // the .paper-shape element itself — never the photo or text on top ──
+  function tornEdgeClipPath() {
+    const pts = [];
+    function addEdge(vertical, fixed, from, to, steps, perpJitter, tangJitter) {
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        let vary = from + (to - from) * t;
+        let f = fixed + (Math.random() - 0.5) * 2 * perpJitter;
+        if (i !== 0 && i !== steps) vary += (Math.random() - 0.5) * 2 * tangJitter;
+        pts.push(vertical ? `${f.toFixed(2)}% ${vary.toFixed(2)}%` : `${vary.toFixed(2)}% ${f.toFixed(2)}%`);
+      }
+    }
+    addEdge(false, 0, 0, 100, 15, 1.6, 0.8);    // top
+    addEdge(true, 100, 0, 100, 15, 1.6, 0.8);   // right
+    addEdge(false, 100, 100, 0, 15, 1.6, 0.8);  // bottom
+    addEdge(true, 0, 100, 0, 15, 1.6, 0.8);     // left
+    return `polygon(${pts.join(",")})`;
+  }
+
+  document.querySelector(".paper-shape").style.clipPath = tornEdgeClipPath();
+
   const stage = document.getElementById("posterStage");
   const poster = document.getElementById("poster");
   const dust = document.getElementById("dustLayer");
