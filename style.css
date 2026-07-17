@@ -81,13 +81,15 @@ html, body {
   position: relative;
   width: min(80vw, 380px);
   padding: 34px 26px 30px;
-  background: var(--paper);
-  filter: url(#roughEdge);
-  box-shadow:
-    0 30px 70px rgba(0,0,0,0.65),
-    0 2px 0 rgba(0,0,0,0.2) inset;
   will-change: transform;
   transform-style: preserve-3d;
+}
+
+.paper-shape {
+  position: absolute;
+  inset: 0;
+  background: var(--paper);
+  filter: drop-shadow(0 26px 46px rgba(0,0,0,0.6));
 }
 
 .paper-tex {
