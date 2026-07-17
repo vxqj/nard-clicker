@@ -179,8 +179,11 @@
     pctx.restore();
   }
 
-  // ── Ember canvas: transient cartoon flame licks + a tip glow, both
-  // fade out every frame instead of accumulating ──
+  // ── FX canvas: a real, continuously-animated fire — a persistent
+  // standing flame at the lighter tip, embers that rise and fade, and
+  // glowing hot edges left behind at each burn point. Everything here
+  // is redrawn from scratch every frame (no accumulation trick), so
+  // it looks like actual moving fire instead of static fading stamps.
   const emberCanvas = document.getElementById("emberCanvas");
   const ectx = emberCanvas.getContext("2d");
 
@@ -193,81 +196,153 @@
   sizeEmberCanvas();
   window.addEventListener("resize", sizeEmberCanvas);
 
-  // bold, flat-colored cartoon flame tongue with a dark outline
-  function drawFlameLick(x, y, size, rot) {
+  let flameIntensity = 0; // eases toward isLit ? 1 : 0 for a smooth ignite/extinguish
+  const embers = []; // rising sparks
+  const hotSpots = []; // lingering glow left behind at burn points
+
+  function spawnHotSpot(x, y) {
+    hotSpots.push({
+      x,
+      y,
+      start: performance.now(),
+      life: 700 + Math.random() * 500,
+      size: 14 + Math.random() * 10,
+    });
+  }
+
+  function spawnEmbers(x, y, count) {
+    for (let i = 0; i < count; i++) {
+      embers.push({
+        x: x + (Math.random() - 0.5) * 10,
+        y: y + (Math.random() - 0.5) * 6,
+        vx: (Math.random() - 0.5) * 26,
+        vy: -40 - Math.random() * 50,
+        start: performance.now(),
+        life: 450 + Math.random() * 400,
+        size: 1.4 + Math.random() * 2.2,
+      });
+    }
+  }
+
+  // one flame tongue, drawn with a live sine-wave sway/height pulse so it
+  // actually flickers frame to frame instead of just fading in place
+  function drawTongue(x, y, h, sway, t) {
+    const w = h * 0.4;
+    ectx.beginPath();
+    ectx.moveTo(x, y + h * 0.18);
+    ectx.bezierCurveTo(x - w + sway, y - h * 0.15, x - w * 0.7 + sway * 1.4, y - h * 0.75, x + sway * 1.8, y - h);
+    ectx.bezierCurveTo(x + w * 0.7 + sway * 1.4, y - h * 0.75, x + w + sway, y - h * 0.15, x, y + h * 0.18);
+    ectx.closePath();
+    const grad = ectx.createLinearGradient(x, y + h * 0.18, x, y - h);
+    grad.addColorStop(0, `rgba(255, 90, 20, ${0.95 * t})`);
+    grad.addColorStop(0.55, `rgba(255, 150, 30, ${0.95 * t})`);
+    grad.addColorStop(1, `rgba(255, 230, 120, ${0.85 * t})`);
+    ectx.fillStyle = grad;
+    ectx.fill();
+    ectx.lineWidth = 1.3;
+    ectx.strokeStyle = `rgba(120, 30, 0, ${0.5 * t})`;
+    ectx.stroke();
+  }
+
+  function drawStandingFlame(x, y, now) {
+    const t = flameIntensity;
+    if (t < 0.02) return;
+
+    ectx.save();
+    ectx.globalCompositeOperation = "lighter";
+    const glowR = 26 * t;
+    const glow = ectx.createRadialGradient(x, y - 6, 0, x, y - 6, glowR);
+    glow.addColorStop(0, `rgba(255, 200, 120, ${0.55 * t})`);
+    glow.addColorStop(1, "rgba(255, 120, 20, 0)");
+    ectx.fillStyle = glow;
+    ectx.beginPath();
+    ectx.arc(x, y - 6, glowR, 0, Math.PI * 2);
+    ectx.fill();
+    ectx.restore();
+
     ectx.save();
     ectx.globalCompositeOperation = "source-over";
-    ectx.translate(x, y);
-    ectx.rotate(rot);
-    const w = size * 0.45;
-    const h = size;
-
-    ectx.beginPath();
-    ectx.moveTo(0, h * 0.15);
-    ectx.bezierCurveTo(-w, -h * 0.1, -w * 0.85, -h * 0.7, 0, -h);
-    ectx.bezierCurveTo(w * 0.85, -h * 0.7, w, -h * 0.1, 0, h * 0.15);
-    ectx.closePath();
-    ectx.fillStyle = "rgba(255, 106, 26, 0.95)";
-    ectx.fill();
-    ectx.lineWidth = 1.4;
-    ectx.strokeStyle = "rgba(110, 26, 0, 0.55)";
-    ectx.stroke();
-
-    ectx.beginPath();
-    ectx.moveTo(0, h * 0.05);
-    ectx.bezierCurveTo(-w * 0.5, -h * 0.05, -w * 0.45, -h * 0.5, 0, -h * 0.7);
-    ectx.bezierCurveTo(w * 0.45, -h * 0.5, w * 0.5, -h * 0.05, 0, h * 0.05);
-    ectx.closePath();
-    ectx.fillStyle = "rgba(255, 224, 110, 0.95)";
-    ectx.fill();
+    const wobble = now / 55;
+    // back (bigger, slower) tongue, then front (smaller, faster) tongue on top
+    drawTongue(x, y, (17 + Math.sin(wobble) * 2.5) * t, Math.sin(wobble * 0.7) * 3, t);
+    drawTongue(x, y, (11 + Math.sin(wobble * 1.6 + 1.4) * 2) * t, Math.sin(wobble * 1.4 + 2) * 2.4, t * 0.95);
     ectx.restore();
   }
 
-  function emberLoop() {
+  function fxLoop() {
+    const now = performance.now();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = emberCanvas.width / dpr;
     const h = emberCanvas.height / dpr;
+    ectx.clearRect(0, 0, w, h);
 
-    ectx.globalCompositeOperation = "destination-out";
-    ectx.fillStyle = "rgba(0, 0, 0, 0.16)";
-    ectx.fillRect(0, 0, w, h);
+    flameIntensity += ((isLit ? 1 : 0) - flameIntensity) * 0.22;
 
-    if (isLit && withinPoster(pointerX, pointerY)) {
-      ectx.globalCompositeOperation = "lighter";
-      const flicker = 8 + Math.sin(Date.now() / 45) * 2 + Math.random() * 2;
-      const grad = ectx.createRadialGradient(pointerX, pointerY, 0, pointerX, pointerY, flicker);
-      grad.addColorStop(0, "rgba(255, 240, 180, 0.85)");
-      grad.addColorStop(0.35, "rgba(255, 140, 30, 0.6)");
+    // lingering charred-edge glow, oldest first so newer ones sit on top
+    for (let i = hotSpots.length - 1; i >= 0; i--) {
+      const p = hotSpots[i];
+      const t = (now - p.start) / p.life;
+      if (t >= 1) {
+        hotSpots.splice(i, 1);
+        continue;
+      }
+      const alpha = (1 - t) * 0.6;
+      const grad = ectx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * (1 + t * 0.5));
+      grad.addColorStop(0, `rgba(255, 130, 40, ${alpha})`);
       grad.addColorStop(1, "rgba(200, 50, 0, 0)");
+      ectx.save();
+      ectx.globalCompositeOperation = "lighter";
       ectx.fillStyle = grad;
       ectx.beginPath();
-      ectx.arc(pointerX, pointerY, flicker, 0, Math.PI * 2);
+      ectx.arc(p.x, p.y, p.size * (1 + t * 0.5), 0, Math.PI * 2);
       ectx.fill();
+      ectx.restore();
     }
 
-    requestAnimationFrame(emberLoop);
+    // rising embers
+    for (let i = embers.length - 1; i >= 0; i--) {
+      const e = embers[i];
+      const t = (now - e.start) / e.life;
+      if (t >= 1) {
+        embers.splice(i, 1);
+        continue;
+      }
+      const dt = Math.min((now - (e._last || e.start)) / 1000, 0.05);
+      e._last = now;
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+      e.vy += 60 * dt; // gentle drag back down as it cools
+      const alpha = 1 - t;
+      ectx.save();
+      ectx.globalCompositeOperation = "lighter";
+      ectx.fillStyle = `rgba(${255}, ${Math.round(200 - t * 120)}, ${Math.round(60 - t * 60)}, ${alpha})`;
+      ectx.beginPath();
+      ectx.arc(e.x, e.y, e.size * (1 - t * 0.4), 0, Math.PI * 2);
+      ectx.fill();
+      ectx.restore();
+    }
+
+    if (isLit && withinPoster(pointerX, pointerY)) {
+      drawStandingFlame(pointerX, pointerY, now);
+      if (Math.random() < 0.55) spawnEmbers(pointerX, pointerY - 8, 1);
+    }
+
+    requestAnimationFrame(fxLoop);
   }
-  requestAnimationFrame(emberLoop);
+  requestAnimationFrame(fxLoop);
 
   // fires whenever the paper actually catches: punches the hole/char on
-  // the paper canvas and spawns a little cartoon flame lick over it
+  // the paper canvas and leaves a glowing hot edge + a burst of embers
   function burnAt(clientX, clientY) {
     const rect = poster.getBoundingClientRect();
     scorchPaperAt(clientX - rect.left, clientY - rect.top);
-
-    if (Math.random() < 0.85) {
-      drawFlameLick(
-        clientX + (Math.random() - 0.5) * 6,
-        clientY + (Math.random() - 0.5) * 4,
-        11 + Math.random() * 9,
-        (Math.random() - 0.5) * 0.7
-      );
-    }
+    spawnHotSpot(clientX, clientY);
+    spawnEmbers(clientX, clientY, 2 + Math.floor(Math.random() * 3));
   }
 
   function burnAlong(x0, y0, x1, y1) {
     const dist = Math.hypot(x1 - x0, y1 - y0);
-    const steps = Math.max(1, Math.floor(dist / 7));
+    const steps = Math.max(1, Math.floor(dist / 9));
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       burnAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
