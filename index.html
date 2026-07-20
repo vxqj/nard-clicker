@@ -85,12 +85,34 @@
 
   /* ---- user badge (top-right, menu/lobby screens) ---- */
   #userBadge{
-    position:absolute; top:14px; right:14px; z-index:10; pointer-events:none; user-select:none;
-    border:1px solid var(--line); background:rgba(8,4,4,0.75); padding:8px 14px; font-size:12px; letter-spacing:1px;
-    text-align:right;
+    position:absolute; top:14px; right:14px; z-index:10; user-select:none;
+    border:1px solid var(--line); background:rgba(8,4,4,0.82); padding:10px 16px 10px 12px; font-size:12px;
+    display:flex; align-items:center; gap:11px; backdrop-filter:blur(3px);
+    box-shadow:0 0 20px rgba(0,0,0,0.5);
   }
-  #userBadge .uname{ color:var(--text); }
-  #userBadge .ulevel{ color:var(--accent); font-size:11px; }
+  #userBadge .avatarCircle{
+    width:38px; height:38px; border-radius:50%; flex-shrink:0;
+    background:radial-gradient(circle at 32% 28%, #d34848, #4a0f0f 75%);
+    border:1px solid var(--accent); color:#fff0e8; font-weight:900; font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+    text-shadow:0 0 8px rgba(0,0,0,0.6);
+  }
+  #userBadge .badgeInfo{ text-align:left; min-width:132px; }
+  #userBadge .uname{ color:var(--text); font-size:12.5px; letter-spacing:1px; line-height:1.2; }
+  #userBadge .ulevel{ color:var(--accent); font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-top:1px; }
+  #userBadge .xpBarOuter{
+    width:100%; height:5px; background:#180d0d; border:1px solid var(--line); margin-top:6px; overflow:hidden; border-radius:2px;
+  }
+  #userBadge .xpBarInner{
+    height:100%; width:0%; border-radius:2px;
+    background:linear-gradient(90deg, var(--accent2), var(--accent));
+    box-shadow:0 0 6px rgba(198,40,40,0.6);
+    transition:width .5s ease;
+  }
+  #userBadge .xpText{ font-size:9px; color:var(--dim); margin-top:3px; letter-spacing:0.5px; }
+
+  /* ---- nametag sprites over other players (rendered via three.js CanvasTexture) ---- */
+  .rules-divider{ border-top:1px solid var(--line); margin:10px 0; opacity:0.6; }
 
   /* ---- party lobby ---- */
   #partyOverlay{ z-index:23; }
@@ -169,8 +191,13 @@
   </div>
 
   <div id="userBadge" class="hidden">
-    <div class="uname" id="userBadgeName">&nbsp;</div>
-    <div class="ulevel" id="userBadgeLevel">&nbsp;</div>
+    <div class="avatarCircle" id="userBadgeAvatar">?</div>
+    <div class="badgeInfo">
+      <div class="uname" id="userBadgeName">&nbsp;</div>
+      <div class="ulevel" id="userBadgeLevel">&nbsp;</div>
+      <div class="xpBarOuter"><div class="xpBarInner" id="userBadgeXpBar"></div></div>
+      <div class="xpText" id="userBadgeXpText">&nbsp;</div>
+    </div>
   </div>
 
   <div id="menu" class="overlay hidden">
@@ -185,9 +212,10 @@
       &bull; Press <span class="key">M</span> to check the full map &mdash; the exit is never marked on it<br>
       &bull; Collect all <b>5 polaroids</b> hidden in the maze &mdash; each one is XP<br>
       &bull; Find the <b>gate switch</b> to unlock the exit<br>
-      &bull; Reach the <b>exit</b> before he reaches you<br><br>
-      If he catches you, it's over.<br><br>
-      <span style="color:var(--dim);font-size:11px;">Clicking "Enter the maze" will try to lock your mouse cursor for smoother looking, and will start audio (turn your volume down a little first). If your browser blocks pointer lock, looking around still works.</span>
+      &bull; Reach the <b>exit</b> before he reaches you<br>
+      &bull; In a party? You'll see your teammates &mdash; and their <b>nametags</b> &mdash; moving through the same maze<br>
+      <div class="rules-divider"></div>
+      If he catches you, it's over.
     </div>
     <button class="btn" id="startBtn">Enter the maze</button>
     <div style="display:flex;gap:10px;margin-top:12px;">
@@ -259,6 +287,20 @@
   const JUMPSCARE_IMG_URL = "https://i.ibb.co/yFvg1KmJ/Pix-Verse-Image-Effect-prompt-Make-me-stick-my-removebg-preview.png";
   document.getElementById("jsimg").src = JUMPSCARE_IMG_URL;
 
+  // Deterministic seeded RNG (mulberry32) — when playing in a party, everyone builds the
+  // maze from the same seed so the layout actually matches between clients. Solo play just
+  // falls back to Math.random via rng() so nothing changes there.
+  function mulberry32(seed){
+    return function(){
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  let rng = Math.random;
+  let mazeSeed = null;
+
   // ================================================================
   // ACCOUNTS + LEVELING + PARTY SYSTEM (Supabase)
   // ================================================================
@@ -271,6 +313,9 @@
   let currentParty = null;     // { id, code, host_id }
   let partyMembersChannel = null;
   let inviteChannel = null;
+  let pendingSeed = null;      // maze seed received from a party member who started first
+  let otherPlayers = {};       // userId -> live teammate state + three.js mesh/nametag
+  let posInterval = null;      // interval id for broadcasting our own position
 
   function xpForLevel(level){ return level*100; } // xp needed to go from `level` to `level+1`
   function levelFromXp(xp){
@@ -283,7 +328,15 @@
     const badge = document.getElementById("userBadge");
     if(!currentProfile){ badge.classList.add("hidden"); return; }
     document.getElementById("userBadgeName").textContent = currentProfile.username;
-    document.getElementById("userBadgeLevel").textContent = "Lv " + currentProfile.level;
+    document.getElementById("userBadgeLevel").textContent = "Level " + currentProfile.level;
+    document.getElementById("userBadgeAvatar").textContent = currentProfile.username.charAt(0).toUpperCase();
+    // work out xp progress within the current level
+    let remaining = currentProfile.xp, lvl = 1;
+    while(remaining >= xpForLevel(lvl)){ remaining -= xpForLevel(lvl); lvl++; }
+    const needed = xpForLevel(currentProfile.level);
+    const pct = Math.max(0, Math.min(100, Math.round((remaining/needed)*100)));
+    document.getElementById("userBadgeXpBar").style.width = pct + "%";
+    document.getElementById("userBadgeXpText").textContent = remaining + " / " + needed + " XP to next level";
     badge.classList.remove("hidden");
   }
 
@@ -375,8 +428,12 @@
   });
 
   document.getElementById("logoutBtn").addEventListener("click", async ()=>{
+    stopPosBroadcast();
+    broadcastLeave();
+    clearOtherPlayers();
+    if(partyMembersChannel){ sb.removeChannel(partyMembersChannel); partyMembersChannel=null; }
     await sb.auth.signOut();
-    currentUser = null; currentProfile = null; currentParty = null;
+    currentUser = null; currentProfile = null; currentParty = null; pendingSeed = null;
     document.getElementById("userBadge").classList.add("hidden");
     document.getElementById("menu").classList.add("hidden");
     document.getElementById("authOverlay").classList.remove("hidden");
@@ -417,9 +474,65 @@
 
   function subscribeToParty(partyId){
     if(partyMembersChannel) sb.removeChannel(partyMembersChannel);
+    pendingSeed = null;
     partyMembersChannel = sb.channel("party-members-"+partyId)
       .on("postgres_changes", {event:"*", schema:"public", table:"party_members", filter:"party_id=eq."+partyId}, refreshPartyMembers)
+      // whoever enters the maze first shares the seed so everyone builds the same layout
+      .on("broadcast", {event:"game-start"}, msg=>{
+        if(pendingSeed===null) pendingSeed = msg.payload.seed;
+      })
+      // live position updates from teammates already in the maze
+      .on("broadcast", {event:"pos"}, msg=>{ handleRemotePos(msg.payload); })
+      // a teammate died / escaped / went back to menu
+      .on("broadcast", {event:"leave"}, msg=>{ handleRemoteLeave(msg.payload.userId); })
       .subscribe();
+  }
+
+  function handleRemotePos(p){
+    if(!currentProfile || !p || p.userId===currentProfile.id) return;
+    let op = otherPlayers[p.userId];
+    if(!op){
+      op = otherPlayers[p.userId] = {
+        username: p.username, level: p.level,
+        x: p.x, z: p.z, targetX: p.x, targetZ: p.z, yaw: p.yaw||0,
+        mesh: buildHumanoid({skin:0xd8b48c, shirt:0x35506e, pants:0x22221f}),
+        nametag: buildNametagSprite(p.username)
+      };
+      op.nametag.position.set(0, 2.05, 0);
+      op.mesh.add(op.nametag);
+      scene.add(op.mesh);
+    }
+    op.username = p.username; op.level = p.level;
+    op.targetX = p.x; op.targetZ = p.z; op.yaw = p.yaw||0;
+    op.lastSeen = performance.now();
+  }
+  function handleRemoteLeave(userId){
+    const op = otherPlayers[userId];
+    if(op){ scene.remove(op.mesh); delete otherPlayers[userId]; }
+  }
+  function clearOtherPlayers(){
+    Object.values(otherPlayers).forEach(op=>scene.remove(op.mesh));
+    otherPlayers = {};
+  }
+  function broadcastLeave(){
+    if(currentParty && partyMembersChannel && currentProfile){
+      partyMembersChannel.send({type:"broadcast", event:"leave", payload:{userId: currentProfile.id}});
+    }
+  }
+  function startPosBroadcast(){
+    stopPosBroadcast();
+    if(!currentParty) return;
+    posInterval = setInterval(()=>{
+      if(state==="playing" && currentParty && partyMembersChannel && currentProfile){
+        partyMembersChannel.send({type:"broadcast", event:"pos", payload:{
+          userId: currentProfile.id, username: currentProfile.username, level: currentProfile.level,
+          x: player.x, z: player.z, yaw: yaw
+        }});
+      }
+    }, 150);
+  }
+  function stopPosBroadcast(){
+    if(posInterval){ clearInterval(posInterval); posInterval=null; }
   }
 
   async function openPartyOverlay(){
@@ -467,9 +580,13 @@
 
   document.getElementById("leavePartyBtn").addEventListener("click", async ()=>{
     if(!currentParty) return;
+    stopPosBroadcast();
+    broadcastLeave();
+    clearOtherPlayers();
     await sb.from("party_members").delete().eq("party_id", currentParty.id).eq("user_id", currentProfile.id);
     if(partyMembersChannel){ sb.removeChannel(partyMembersChannel); partyMembersChannel=null; }
     currentParty = null;
+    pendingSeed = null;
     document.getElementById("partyOverlay").classList.add("hidden");
     document.getElementById("menu").classList.remove("hidden");
   });
@@ -558,7 +675,7 @@
     const stack = [[1,1]];
     while(stack.length){
       const [cx,cy] = stack[stack.length-1];
-      const dirs = shuffle([[2,0],[-2,0],[0,2],[0,-2]]);
+      const dirs = shuffle([[2,0],[-2,0],[0,2],[0,-2]], rng);
       let carved = false;
       for(const [dx,dy] of dirs){
         const nx=cx+dx, ny=cy+dy;
@@ -575,19 +692,19 @@
     // scatter open rooms for variety, scaled to maze size
     const roomCount = Math.floor((COLS*ROWS)/450);
     for(let i=0;i<roomCount;i++){
-      const rx=2+Math.floor(Math.random()*(COLS-6));
-      const ry=2+Math.floor(Math.random()*(ROWS-6));
-      const rw=2+Math.floor(Math.random()*3), rh=2+Math.floor(Math.random()*3);
+      const rx=2+Math.floor(rng()*(COLS-6));
+      const ry=2+Math.floor(rng()*(ROWS-6));
+      const rw=2+Math.floor(rng()*3), rh=2+Math.floor(rng()*3);
       for(let y=ry;y<Math.min(ry+rh,ROWS-1);y++)
         for(let x=rx;x<Math.min(rx+rw,COLS-1);x++) grid[y][x]=0;
     }
   }
-  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function shuffle(a, src){ src = src || Math.random; for(let i=a.length-1;i>0;i--){ const j=Math.floor(src()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
   function randFloorCell(minDistFrom,minDist){
     let tries=0;
     while(tries<20000){
       tries++;
-      const x=1+Math.floor(Math.random()*(COLS-2)), y=1+Math.floor(Math.random()*(ROWS-2));
+      const x=1+Math.floor(rng()*(COLS-2)), y=1+Math.floor(rng()*(ROWS-2));
       if(grid[y][x]===0){
         if(!minDistFrom) return {x,y};
         if(Math.hypot(x-minDistFrom.x,y-minDistFrom.y)>=minDist) return {x,y};
@@ -812,6 +929,29 @@
   const player3D = buildHumanoid({skin:0xd8b48c, shirt:0x2e3a4e, pants:0x22221f});
   scene.add(player3D);
 
+  // ---------------- teammate nametags ----------------
+  function buildNametagSprite(username){
+    const c=document.createElement("canvas"); c.width=256; c.height=64;
+    const g=c.getContext("2d");
+    g.font="bold 30px Courier New";
+    g.textAlign="center";
+    g.textBaseline="middle";
+    const textW = g.measureText(username).width;
+    g.fillStyle="rgba(5,2,2,0.65)";
+    g.strokeStyle="rgba(198,40,40,0.5)"; g.lineWidth=1.5;
+    const padX=16;
+    g.fillRect(128-textW/2-padX, 16, textW+padX*2, 32);
+    g.strokeRect(128-textW/2-padX, 16, textW+padX*2, 32);
+    g.fillStyle="#e8b23a";
+    g.fillText(username, 128, 33);
+    const tex = new THREE.CanvasTexture(c);
+    const mat = new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(1.3, 0.33, 1);
+    sprite.renderOrder = 999;
+    return sprite;
+  }
+
   // ---------------- monster: a big billboarded picture of a face ----------------
   let monsterFaceMat, monsterGlow;
   function buildMonster(){
@@ -994,6 +1134,12 @@
     const ctx = fullmapCanvas.getContext("2d");
     ctx.drawImage(fullMapBase,0,0);
     const cell = 3;
+    ctx.fillStyle="#4aa3ff";
+    Object.values(otherPlayers).forEach(op=>{
+      ctx.beginPath();
+      ctx.arc((op.x/TILE)*cell, (op.z/TILE)*cell, 5, 0, Math.PI*2);
+      ctx.fill();
+    });
     ctx.fillStyle="#c62828";
     ctx.beginPath();
     ctx.arc((player.x/TILE)*cell, (player.z/TILE)*cell, 5, 0, Math.PI*2);
@@ -1037,6 +1183,16 @@
         ctx.fill();
       }
     }
+    // teammates — always visible on the minimap, unlike the monster
+    Object.values(otherPlayers).forEach(op=>{
+      const tdx = (op.x-player.x)/TILE, tdz = (op.z-player.z)/TILE;
+      if(Math.abs(tdx)<=radiusTiles && Math.abs(tdz)<=radiusTiles){
+        ctx.fillStyle = "#4aa3ff";
+        ctx.beginPath();
+        ctx.arc(size/2+tdx*cellPx, size/2+tdz*cellPx, 4, 0, Math.PI*2);
+        ctx.fill();
+      }
+    });
   }
 
   function setup(){
@@ -1396,6 +1552,18 @@
     flashlight.target.position.set(player.x + lookDir.x*4, eyeHeight + lookDir.y*4, player.z + lookDir.z*4);
     flashlight.target.updateMatrixWorld();
 
+    // teammates — smoothly interpolate toward their last broadcast position, drop stale ones
+    const nowT = performance.now();
+    Object.keys(otherPlayers).forEach(id=>{
+      const op = otherPlayers[id];
+      if(nowT - op.lastSeen > 6000){ scene.remove(op.mesh); delete otherPlayers[id]; return; }
+      const lerpT = Math.min(1, dt*8);
+      op.x += (op.targetX - op.x) * lerpT;
+      op.z += (op.targetZ - op.z) * lerpT;
+      op.mesh.position.set(op.x, 0, op.z);
+      op.mesh.rotation.y = op.yaw;
+    });
+
     drawMinimap();
     drawFullMapFrame();
   }
@@ -1403,6 +1571,8 @@
   // ---------------- states ----------------
   function triggerJumpscare(){
     state="jumpscare";
+    stopPosBroadcast();
+    broadcastLeave();
     document.getElementById("jumpscareWrap").classList.remove("hidden");
     document.getElementById("redflash").style.transition="none";
     document.getElementById("redflash").style.opacity="0.55";
@@ -1423,6 +1593,8 @@
   }
   function triggerWin(){
     state="win";
+    stopPosBroadcast();
+    broadcastLeave();
     document.getElementById("hud").classList.add("hidden");
     document.getElementById("crosshair").classList.add("hidden");
     document.getElementById("minimapWrap").classList.add("hidden");
@@ -1433,7 +1605,22 @@
     requestLock(); // must fire synchronously inside the click gesture or browsers will refuse it
     ensureAudio();
     document.getElementById("loading").classList.remove("hidden");
+    clearOtherPlayers();
     setTimeout(()=>{
+      if(currentParty){
+        if(pendingSeed===null){
+          // nobody in the party has started yet — we generate the seed and share it
+          mazeSeed = ((Date.now() ^ Math.floor(Math.random()*0xffffffff)) >>> 0);
+          if(partyMembersChannel) partyMembersChannel.send({type:"broadcast", event:"game-start", payload:{seed:mazeSeed}});
+        } else {
+          mazeSeed = pendingSeed;
+        }
+        pendingSeed = null;
+        rng = mulberry32(mazeSeed);
+      } else {
+        mazeSeed = null;
+        rng = Math.random;
+      }
       setup();
       document.getElementById("menu").classList.add("hidden");
       document.getElementById("gameover").classList.add("hidden");
@@ -1444,6 +1631,7 @@
       document.getElementById("minimapWrap").classList.remove("hidden");
       document.getElementById("loading").classList.add("hidden");
       state="playing";
+      startPosBroadcast();
     }, 60);
   }
   document.getElementById("startBtn").addEventListener("click", startGame);
