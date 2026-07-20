@@ -162,7 +162,6 @@
         <button class="authTab" id="tabLogin" type="button">Log in</button>
       </div>
       <input class="authField" id="authUsername" type="text" placeholder="username" maxlength="20" autocomplete="username">
-      <input class="authField" id="authEmail" type="email" placeholder="email" autocomplete="email">
       <input class="authField" id="authPassword" type="password" placeholder="password" autocomplete="current-password">
       <button class="btn" id="authSubmitBtn" style="width:100%;">Sign up</button>
       <div id="authMsg"></div>
@@ -302,12 +301,19 @@
   }
 
   // ---------------- auth screen ----------------
+  // Supabase Auth requires an email under the hood, but the UI only ever asks for a
+  // username + password. We synthesize a stable, hidden placeholder email from the
+  // username (e.g. "nard99" -> "nard99@nard.local") so the user never sees or types one.
+  function usernameToFakeEmail(username){
+    const clean = username.toLowerCase().replace(/[^a-z0-9_.-]/g,"");
+    return clean + "@nard.local";
+  }
+
   let authMode = "signup";
   function setAuthMode(mode){
     authMode = mode;
     document.getElementById("tabSignup").classList.toggle("active", mode==="signup");
     document.getElementById("tabLogin").classList.toggle("active", mode==="login");
-    document.getElementById("authUsername").style.display = mode==="signup" ? "block" : "none";
     document.getElementById("authSubmitBtn").textContent = mode==="signup" ? "Sign up" : "Log in";
     document.getElementById("authMsg").textContent = "";
   }
@@ -338,23 +344,32 @@
   }
 
   document.getElementById("authSubmitBtn").addEventListener("click", async ()=>{
-    const email = document.getElementById("authEmail").value.trim();
-    const password = document.getElementById("authPassword").value;
     const username = document.getElementById("authUsername").value.trim();
+    const password = document.getElementById("authPassword").value;
     const msg = document.getElementById("authMsg");
     msg.textContent = "";
-    if(!email || !password || (authMode==="signup" && !username)){
+    if(!username || !password){
       msg.textContent = "Fill in everything first.";
       return;
     }
+    const fakeEmail = usernameToFakeEmail(username);
+
     if(authMode==="signup"){
-      const { data, error } = await sb.auth.signUp({ email, password });
-      if(error){ msg.textContent = error.message; return; }
-      if(!data.session){ msg.textContent = "Check your email to confirm, then log in."; return; }
+      const { data, error } = await sb.auth.signUp({ email: fakeEmail, password });
+      if(error){
+        msg.textContent = /registered|exists/i.test(error.message) ? "That username's taken." : error.message;
+        return;
+      }
+      if(!data.session){
+        // this happens if "Confirm email" is still enabled in the Supabase project —
+        // turn it off in Authentication > Providers > Email, since these addresses aren't real
+        msg.textContent = "Signup failed — try again in a moment.";
+        return;
+      }
       await onAuthed(data.user, username);
     } else {
-      const { data, error } = await sb.auth.signInWithPassword({ email, password });
-      if(error){ msg.textContent = error.message; return; }
+      const { data, error } = await sb.auth.signInWithPassword({ email: fakeEmail, password });
+      if(error){ msg.textContent = "Wrong username or password."; return; }
       await onAuthed(data.user);
     }
   });
