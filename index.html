@@ -67,6 +67,55 @@
   #loading{ position:absolute; inset:0; z-index:25; display:flex; align-items:center; justify-content:center; background:#000; color:var(--dim); letter-spacing:3px; font-size:13px; }
   #fullmapOverlay{ z-index:22; background:rgba(0,0,0,0.94); }
   #fullmapCanvas{ border:1px solid var(--line); box-shadow:0 0 30px rgba(198,40,40,0.15); background:#000; image-rendering:pixelated; }
+
+  /* ---- auth ---- */
+  #authOverlay{ z-index:40; }
+  .authField{
+    width:100%; background:#0d0606; border:1px solid var(--line); color:var(--text); font-family:inherit;
+    font-size:13px; padding:9px 10px; margin-bottom:8px; letter-spacing:1px;
+  }
+  .authField:focus{ outline:none; border-color:var(--accent); }
+  .authTabs{ display:flex; gap:6px; margin-bottom:14px; }
+  .authTab{
+    background:transparent; border:1px solid var(--line); color:var(--dim); font-family:inherit; font-size:11px;
+    letter-spacing:2px; text-transform:uppercase; padding:7px 16px; cursor:pointer;
+  }
+  .authTab.active{ border-color:var(--accent); color:var(--accent); }
+  #authMsg{ min-height:16px; font-size:11px; color:var(--accent); letter-spacing:1px; margin-top:8px; }
+
+  /* ---- user badge (top-right, menu/lobby screens) ---- */
+  #userBadge{
+    position:absolute; top:14px; right:14px; z-index:10; pointer-events:none; user-select:none;
+    border:1px solid var(--line); background:rgba(8,4,4,0.75); padding:8px 14px; font-size:12px; letter-spacing:1px;
+    text-align:right;
+  }
+  #userBadge .uname{ color:var(--text); }
+  #userBadge .ulevel{ color:var(--accent); font-size:11px; }
+
+  /* ---- party lobby ---- */
+  #partyOverlay{ z-index:23; }
+  .partyRow{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    border-bottom:1px solid var(--line); padding:7px 2px; font-size:12px;
+  }
+  .partyRow:last-child{ border-bottom:none; }
+  .codeBox{
+    font-size:22px; letter-spacing:6px; color:var(--accent); border:1px dashed var(--line);
+    padding:8px 16px; margin:6px 0 14px 0; display:inline-block;
+  }
+  .searchRow{ display:flex; gap:6px; margin-bottom:8px; }
+  .searchRow input{ flex:1; }
+  .miniBtn{
+    background:transparent;border:1px solid var(--accent);color:var(--accent);padding:5px 12px;
+    font-family:inherit;letter-spacing:1px;font-size:10.5px;cursor:pointer;text-transform:uppercase;
+  }
+  .miniBtn:hover{ background:var(--accent); color:#0a0000; }
+  .miniBtn.ghost{ border-color:var(--dim); color:var(--dim); }
+  .miniBtn.ghost:hover{ background:var(--dim); color:#0a0000; }
+  #inviteBanner{
+    border:1px solid var(--accent); background:rgba(198,40,40,0.12); padding:8px 12px; margin-bottom:12px;
+    font-size:11.5px; text-align:left; display:flex; justify-content:space-between; align-items:center; gap:10px;
+  }
 </style>
 
 <div id="wrap">
@@ -104,7 +153,28 @@
     <button class="btn" id="resumeBtn">Click to look around again</button>
   </div>
 
-  <div id="menu" class="overlay">
+  <div id="authOverlay" class="overlay">
+    <h1 class="title" style="font-size:clamp(22px,5vw,40px);">Nard's Maze</h1>
+    <div class="subtitle">sign in to keep your level</div>
+    <div class="panel" style="max-width:320px;">
+      <div class="authTabs">
+        <button class="authTab active" id="tabSignup" type="button">Sign up</button>
+        <button class="authTab" id="tabLogin" type="button">Log in</button>
+      </div>
+      <input class="authField" id="authUsername" type="text" placeholder="username" maxlength="20" autocomplete="username">
+      <input class="authField" id="authEmail" type="email" placeholder="email" autocomplete="email">
+      <input class="authField" id="authPassword" type="password" placeholder="password" autocomplete="current-password">
+      <button class="btn" id="authSubmitBtn" style="width:100%;">Sign up</button>
+      <div id="authMsg"></div>
+    </div>
+  </div>
+
+  <div id="userBadge" class="hidden">
+    <div class="uname" id="userBadgeName">&nbsp;</div>
+    <div class="ulevel" id="userBadgeLevel">&nbsp;</div>
+  </div>
+
+  <div id="menu" class="overlay hidden">
     <h1 class="title">Nard's Maze</h1>
     <div class="subtitle">he doesn't want you to leave</div>
     <div class="panel">
@@ -114,13 +184,53 @@
       &bull; Move your <b>mouse</b> to look around, first-person style<br>
       &bull; Press <span class="key">F</span> to toggle your flashlight &mdash; it helps you see, but it also helps <b>him</b> see you<br>
       &bull; Press <span class="key">M</span> to check the full map &mdash; the exit is never marked on it<br>
-      &bull; Collect all <b>5 polaroids</b> hidden in the maze<br>
+      &bull; Collect all <b>5 polaroids</b> hidden in the maze &mdash; each one is XP<br>
       &bull; Find the <b>gate switch</b> to unlock the exit<br>
       &bull; Reach the <b>exit</b> before he reaches you<br><br>
       If he catches you, it's over.<br><br>
       <span style="color:var(--dim);font-size:11px;">Clicking "Enter the maze" will try to lock your mouse cursor for smoother looking, and will start audio (turn your volume down a little first). If your browser blocks pointer lock, looking around still works.</span>
     </div>
     <button class="btn" id="startBtn">Enter the maze</button>
+    <div style="display:flex;gap:10px;margin-top:12px;">
+      <button class="btn" id="createPartyBtn" style="font-size:11px;padding:8px 18px;">Create Party</button>
+      <button class="btn" id="joinPartyBtn" style="font-size:11px;padding:8px 18px;">Join Party</button>
+    </div>
+    <button class="btn" id="logoutBtn" style="font-size:10px;padding:6px 14px;border-color:var(--dim);color:var(--dim);margin-top:14px;">Log out</button>
+  </div>
+
+  <div id="joinCodeOverlay" class="overlay hidden" style="z-index:24;">
+    <div class="subtitle" style="margin-bottom:10px;">enter party code</div>
+    <input class="authField" id="joinCodeInput" style="max-width:220px;text-align:center;letter-spacing:5px;text-transform:uppercase;" maxlength="5" placeholder="7HBK8">
+    <div id="joinCodeMsg" style="min-height:16px;font-size:11px;color:var(--accent);margin:6px 0 12px 0;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn" id="joinCodeSubmit" style="font-size:11px;padding:8px 18px;">Join</button>
+      <button class="btn" id="joinCodeCancel" style="font-size:11px;padding:8px 18px;border-color:var(--dim);color:var(--dim);">Cancel</button>
+    </div>
+  </div>
+
+  <div id="partyOverlay" class="overlay hidden">
+    <div class="subtitle" style="margin-bottom:6px;">party</div>
+    <div id="inviteBanner" class="hidden"></div>
+    <div class="panel" style="max-width:400px;">
+      <div>your code</div>
+      <div class="codeBox" id="partyCodeDisplay">-----</div>
+      <div id="partyMembersList"></div>
+      <div style="margin-top:14px;">
+        <div style="font-size:11px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">invite by username</div>
+        <div class="searchRow">
+          <input class="authField" id="playerSearchInput" style="margin-bottom:0;" placeholder="search players...">
+          <button class="miniBtn" id="playerSearchBtn">Search</button>
+        </div>
+        <div id="playerSearchResults"></div>
+      </div>
+      <div style="color:var(--dim);font-size:10.5px;margin-top:14px;letter-spacing:1px;">
+        everyone here can start their own run for now &mdash; seeing each other move around the same maze together is coming next.
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn" id="partyStartBtn" style="font-size:11px;padding:8px 18px;">Enter the maze</button>
+      <button class="btn" id="leavePartyBtn" style="font-size:11px;padding:8px 18px;border-color:var(--dim);color:var(--dim);">Leave Party</button>
+    </div>
   </div>
 
   <div id="jumpscareWrap" class="overlay hidden">
@@ -140,6 +250,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (function(){
@@ -148,6 +259,273 @@
   const MONSTER_IMG_URL = "https://i.ibb.co/XRW2R1p/Chat-GPT-Image-Jul-16-2026-12-07-01-PM-removebg-preview.png";
   const JUMPSCARE_IMG_URL = "https://i.ibb.co/yFvg1KmJ/Pix-Verse-Image-Effect-prompt-Make-me-stick-my-removebg-preview.png";
   document.getElementById("jsimg").src = JUMPSCARE_IMG_URL;
+
+  // ================================================================
+  // ACCOUNTS + LEVELING + PARTY SYSTEM (Supabase)
+  // ================================================================
+  const SUPABASE_URL = "https://wvzjdfjeyxtzcxpyvudz.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind2empkZmpleXh0emN4cHl2dWR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0ODYzOTcsImV4cCI6MjEwMDA2MjM5N30.1XulfN_DMOUqMsVv7UcPD1Xb25br_ebDy9H6jA3owPY";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let currentUser = null;      // supabase auth user object
+  let currentProfile = null;   // { id, username, level, xp }
+  let currentParty = null;     // { id, code, host_id }
+  let partyMembersChannel = null;
+  let inviteChannel = null;
+
+  function xpForLevel(level){ return level*100; } // xp needed to go from `level` to `level+1`
+  function levelFromXp(xp){
+    let lvl = 1, remaining = xp;
+    while(remaining >= xpForLevel(lvl)){ remaining -= xpForLevel(lvl); lvl++; }
+    return lvl;
+  }
+
+  function updateUserBadge(){
+    const badge = document.getElementById("userBadge");
+    if(!currentProfile){ badge.classList.add("hidden"); return; }
+    document.getElementById("userBadgeName").textContent = currentProfile.username;
+    document.getElementById("userBadgeLevel").textContent = "Lv " + currentProfile.level;
+    badge.classList.remove("hidden");
+  }
+
+  async function awardXp(amount){
+    if(!currentProfile) return;
+    currentProfile.xp += amount;
+    const newLevel = levelFromXp(currentProfile.xp);
+    const leveledUp = newLevel > currentProfile.level;
+    currentProfile.level = newLevel;
+    updateUserBadge();
+    if(leveledUp) showMsg("Level up! Now level " + newLevel);
+    try{
+      await sb.from("profiles").update({xp: currentProfile.xp, level: currentProfile.level}).eq("id", currentProfile.id);
+    }catch(e){ /* non-fatal — local state already reflects it, will resync on next successful write */ }
+  }
+
+  // ---------------- auth screen ----------------
+  let authMode = "signup";
+  function setAuthMode(mode){
+    authMode = mode;
+    document.getElementById("tabSignup").classList.toggle("active", mode==="signup");
+    document.getElementById("tabLogin").classList.toggle("active", mode==="login");
+    document.getElementById("authUsername").style.display = mode==="signup" ? "block" : "none";
+    document.getElementById("authSubmitBtn").textContent = mode==="signup" ? "Sign up" : "Log in";
+    document.getElementById("authMsg").textContent = "";
+  }
+  document.getElementById("tabSignup").addEventListener("click", ()=>setAuthMode("signup"));
+  document.getElementById("tabLogin").addEventListener("click", ()=>setAuthMode("login"));
+
+  async function ensureProfileRow(user, fallbackUsername){
+    let { data, error } = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    if(data) return data;
+    const username = fallbackUsername || ("player" + Math.floor(Math.random()*10000));
+    const insertRes = await sb.from("profiles").insert({id:user.id, username}).select().single();
+    if(insertRes.error) throw insertRes.error;
+    return insertRes.data;
+  }
+
+  async function onAuthed(user, fallbackUsername){
+    currentUser = user;
+    try{
+      currentProfile = await ensureProfileRow(user, fallbackUsername);
+    }catch(e){
+      document.getElementById("authMsg").textContent = "That username's taken — try another.";
+      return;
+    }
+    document.getElementById("authOverlay").classList.add("hidden");
+    document.getElementById("menu").classList.remove("hidden");
+    updateUserBadge();
+    subscribeToInvites();
+  }
+
+  document.getElementById("authSubmitBtn").addEventListener("click", async ()=>{
+    const email = document.getElementById("authEmail").value.trim();
+    const password = document.getElementById("authPassword").value;
+    const username = document.getElementById("authUsername").value.trim();
+    const msg = document.getElementById("authMsg");
+    msg.textContent = "";
+    if(!email || !password || (authMode==="signup" && !username)){
+      msg.textContent = "Fill in everything first.";
+      return;
+    }
+    if(authMode==="signup"){
+      const { data, error } = await sb.auth.signUp({ email, password });
+      if(error){ msg.textContent = error.message; return; }
+      if(!data.session){ msg.textContent = "Check your email to confirm, then log in."; return; }
+      await onAuthed(data.user, username);
+    } else {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if(error){ msg.textContent = error.message; return; }
+      await onAuthed(data.user);
+    }
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", async ()=>{
+    await sb.auth.signOut();
+    currentUser = null; currentProfile = null; currentParty = null;
+    document.getElementById("userBadge").classList.add("hidden");
+    document.getElementById("menu").classList.add("hidden");
+    document.getElementById("authOverlay").classList.remove("hidden");
+  });
+
+  // on load: resume an existing session so returning visitors skip straight to the menu
+  (async function initAuth(){
+    const { data } = await sb.auth.getSession();
+    if(data && data.session && data.session.user){
+      await onAuthed(data.session.user);
+    }
+  })();
+
+  // ---------------- party ----------------
+  function randomPartyCode(){
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I to avoid confusion
+    let code = "";
+    for(let i=0;i<5;i++) code += chars[Math.floor(Math.random()*chars.length)];
+    return code;
+  }
+
+  async function refreshPartyMembers(){
+    if(!currentParty) return;
+    const { data } = await sb.from("party_members")
+      .select("user_id, profiles(username, level)")
+      .eq("party_id", currentParty.id);
+    const list = document.getElementById("partyMembersList");
+    list.innerHTML = "";
+    (data||[]).forEach(row=>{
+      const div = document.createElement("div");
+      div.className = "partyRow";
+      const isHost = row.user_id === currentParty.host_id;
+      div.innerHTML = "<span>" + (row.profiles ? row.profiles.username : "?") + (isHost ? " (host)" : "") + "</span>" +
+        "<span>Lv " + (row.profiles ? row.profiles.level : "?") + "</span>";
+      list.appendChild(div);
+    });
+  }
+
+  function subscribeToParty(partyId){
+    if(partyMembersChannel) sb.removeChannel(partyMembersChannel);
+    partyMembersChannel = sb.channel("party-members-"+partyId)
+      .on("postgres_changes", {event:"*", schema:"public", table:"party_members", filter:"party_id=eq."+partyId}, refreshPartyMembers)
+      .subscribe();
+  }
+
+  async function openPartyOverlay(){
+    document.getElementById("menu").classList.add("hidden");
+    document.getElementById("partyOverlay").classList.remove("hidden");
+    document.getElementById("partyCodeDisplay").textContent = currentParty.code;
+    document.getElementById("playerSearchResults").innerHTML = "";
+    document.getElementById("playerSearchInput").value = "";
+    await refreshPartyMembers();
+    subscribeToParty(currentParty.id);
+  }
+
+  document.getElementById("createPartyBtn").addEventListener("click", async ()=>{
+    if(!currentProfile) return;
+    const code = randomPartyCode();
+    const { data, error } = await sb.from("parties").insert({code, host_id: currentProfile.id}).select().single();
+    if(error){ alert("Couldn't create a party: " + error.message); return; }
+    currentParty = data;
+    await sb.from("party_members").insert({party_id: currentParty.id, user_id: currentProfile.id});
+    openPartyOverlay();
+  });
+
+  document.getElementById("joinPartyBtn").addEventListener("click", ()=>{
+    document.getElementById("menu").classList.add("hidden");
+    document.getElementById("joinCodeOverlay").classList.remove("hidden");
+    document.getElementById("joinCodeInput").value = "";
+    document.getElementById("joinCodeMsg").textContent = "";
+  });
+  document.getElementById("joinCodeCancel").addEventListener("click", ()=>{
+    document.getElementById("joinCodeOverlay").classList.add("hidden");
+    document.getElementById("menu").classList.remove("hidden");
+  });
+  document.getElementById("joinCodeSubmit").addEventListener("click", async ()=>{
+    const code = document.getElementById("joinCodeInput").value.trim().toUpperCase();
+    const msg = document.getElementById("joinCodeMsg");
+    if(!code){ msg.textContent = "Enter a code first."; return; }
+    const { data: party, error } = await sb.from("parties").select("*").eq("code", code).maybeSingle();
+    if(error || !party){ msg.textContent = "No party with that code."; return; }
+    const { error: joinErr } = await sb.from("party_members").insert({party_id: party.id, user_id: currentProfile.id});
+    if(joinErr && !String(joinErr.message).includes("duplicate")){ msg.textContent = "Couldn't join: " + joinErr.message; return; }
+    currentParty = party;
+    document.getElementById("joinCodeOverlay").classList.add("hidden");
+    openPartyOverlay();
+  });
+
+  document.getElementById("leavePartyBtn").addEventListener("click", async ()=>{
+    if(!currentParty) return;
+    await sb.from("party_members").delete().eq("party_id", currentParty.id).eq("user_id", currentProfile.id);
+    if(partyMembersChannel){ sb.removeChannel(partyMembersChannel); partyMembersChannel=null; }
+    currentParty = null;
+    document.getElementById("partyOverlay").classList.add("hidden");
+    document.getElementById("menu").classList.remove("hidden");
+  });
+
+  document.getElementById("partyStartBtn").addEventListener("click", ()=>{
+    document.getElementById("partyOverlay").classList.add("hidden");
+    startGame();
+  });
+
+  let searchDebounce = null;
+  document.getElementById("playerSearchBtn").addEventListener("click", runPlayerSearch);
+  document.getElementById("playerSearchInput").addEventListener("keydown", e=>{
+    if(e.key==="Enter") runPlayerSearch();
+  });
+  async function runPlayerSearch(){
+    const q = document.getElementById("playerSearchInput").value.trim();
+    const results = document.getElementById("playerSearchResults");
+    results.innerHTML = "";
+    if(!q || !currentParty) return;
+    const { data, error } = await sb.from("profiles").select("id, username, level").ilike("username", "%"+q+"%").limit(8);
+    if(error || !data) return;
+    data.filter(p=>p.id!==currentProfile.id).forEach(p=>{
+      const row = document.createElement("div");
+      row.className = "partyRow";
+      row.innerHTML = "<span>" + p.username + " (Lv " + p.level + ")</span>";
+      const inviteBtn = document.createElement("button");
+      inviteBtn.className = "miniBtn"; inviteBtn.textContent = "Invite";
+      inviteBtn.addEventListener("click", async ()=>{
+        inviteBtn.disabled = true; inviteBtn.textContent = "Sent";
+        await sb.from("party_invites").insert({party_id: currentParty.id, from_user: currentProfile.id, to_user: p.id});
+      });
+      row.appendChild(inviteBtn);
+      results.appendChild(row);
+    });
+  }
+
+  // incoming invites — subscribed once we know who we are
+  function subscribeToInvites(){
+    if(!currentProfile) return;
+    if(inviteChannel) sb.removeChannel(inviteChannel);
+    inviteChannel = sb.channel("invites-"+currentProfile.id)
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"party_invites", filter:"to_user=eq."+currentProfile.id},
+        payload => showIncomingInvite(payload.new))
+      .subscribe();
+  }
+  async function showIncomingInvite(invite){
+    const { data: party } = await sb.from("parties").select("*").eq("id", invite.party_id).maybeSingle();
+    const { data: fromProfile } = await sb.from("profiles").select("username").eq("id", invite.from_user).maybeSingle();
+    if(!party) return;
+    const banner = document.getElementById("inviteBanner");
+    banner.classList.remove("hidden");
+    banner.innerHTML = "<span>" + (fromProfile ? fromProfile.username : "someone") + " invited you (code " + party.code + ")</span>";
+    const acceptBtn = document.createElement("button");
+    acceptBtn.className = "miniBtn"; acceptBtn.textContent = "Accept";
+    acceptBtn.addEventListener("click", async ()=>{
+      await sb.from("party_members").insert({party_id: party.id, user_id: currentProfile.id});
+      await sb.from("party_invites").update({status:"accepted"}).eq("id", invite.id);
+      currentParty = party;
+      banner.classList.add("hidden");
+      document.getElementById("menu").classList.add("hidden");
+      openPartyOverlay();
+    });
+    const declineBtn = document.createElement("button");
+    declineBtn.className = "miniBtn ghost"; declineBtn.textContent = "Decline";
+    declineBtn.addEventListener("click", async ()=>{
+      await sb.from("party_invites").update({status:"declined"}).eq("id", invite.id);
+      banner.classList.add("hidden");
+    });
+    banner.appendChild(acceptBtn);
+    banner.appendChild(declineBtn);
+  }
 
   // ---------------- maze ----------------
   // Tune these two to control how "fucking massive" it is. Both must stay ODD.
@@ -898,6 +1276,7 @@
         p.collected = true;
         showMsg("Picked up a polaroid (" + collected() + "/5)");
         updateHud();
+        awardXp(20);
       }
     }
     // switch
