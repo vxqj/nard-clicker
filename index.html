@@ -43,7 +43,11 @@
   #objectives .oline{ margin:3px 0; color:var(--dim); }
   #objectives .oline.done{ color:#7a9a6b; text-decoration:line-through; }
   #flash-status{ margin-top:8px; font-size:11px; color:var(--dim); letter-spacing:1px; }
-  #map-hint{ margin-top:2px; font-size:11px; color:var(--dim); letter-spacing:1px; }
+  #sprint-hint{ margin-top:6px; font-size:11px; color:var(--dim); letter-spacing:1px; }
+  .staminaBarOuter{ width:180px; height:6px; background:#180d0d; border:1px solid var(--line); margin-top:4px; overflow:hidden; border-radius:2px; }
+  .staminaBarInner{ height:100%; width:100%; background:linear-gradient(90deg,#5a7a32,#9fc954); transition:width .12s linear, background .2s ease; }
+  .staminaBarInner.low{ background:linear-gradient(90deg,#8a3a3a,#d15a5a); }
+  #map-hint{ margin-top:6px; font-size:11px; color:var(--dim); letter-spacing:1px; }
   #crosshair{
     position:absolute; top:50%; left:50%; width:5px; height:5px; margin:-2px 0 0 -2px;
     background:rgba(255,255,255,0.35); border-radius:50%; z-index:9; pointer-events:none;
@@ -138,6 +142,13 @@
     border:1px solid var(--accent); background:rgba(198,40,40,0.12); padding:8px 12px; margin-bottom:12px;
     font-size:11.5px; text-align:left; display:flex; justify-content:space-between; align-items:center; gap:10px;
   }
+
+  /* ---- map / gamemode choice buttons (menu + party lobby) ---- */
+  .choiceBtn.active{ background:var(--accent); color:#0a0000; box-shadow:0 0 12px rgba(198,40,40,0.5); }
+  .choiceBtn:disabled{ opacity:0.4; cursor:default; }
+  .settingsLabel{ font-size:11px; color:var(--dim); letter-spacing:1px; margin-bottom:6px; text-transform:uppercase; }
+  .settingsRow{ display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .hostOnlyNote{ font-size:10px; color:var(--dim); letter-spacing:0.5px; margin-top:-6px; margin-bottom:10px; }
 </style>
 
 <div id="wrap">
@@ -151,7 +162,10 @@
       <div class="oline" id="obj-collect">Find polaroids &nbsp;0/5</div>
       <div class="oline" id="obj-switch">Reach the gate switch</div>
       <div class="oline" id="obj-exit">Escape through the exit</div>
+      <div class="oline" id="obj-difficulty">Difficulty: Normal</div>
       <div id="flash-status">flashlight: OFF &mdash; press F to toggle</div>
+      <div id="sprint-hint">hold <span class="key">SHIFT</span> to sprint</div>
+      <div class="staminaBarOuter"><div class="staminaBarInner" id="staminaBar"></div></div>
       <div id="map-hint">press M for the full map</div>
     </div>
   </div>
@@ -214,8 +228,16 @@
       &bull; Find the <b>gate switch</b> to unlock the exit<br>
       &bull; Reach the <b>exit</b> before he reaches you<br>
       &bull; In a party? You'll see your teammates &mdash; and their <b>nametags</b> &mdash; moving through the same maze<br>
+      &bull; Hold <span class="key">SHIFT</span> to sprint &mdash; watch your stamina bar, it needs time to recover<br>
+      &bull; Difficulty controls how many of <b>him</b> are in there with you: Easy (1), Normal (3), Hard (10)<br>
       <div class="rules-divider"></div>
       If he catches you, it's over.
+    </div>
+    <div class="panel" style="max-width:400px;">
+      <div class="settingsLabel">map</div>
+      <div class="settingsRow" id="soloMapRow"></div>
+      <div class="settingsLabel">difficulty</div>
+      <div class="settingsRow" id="soloDifficultyRow"></div>
     </div>
     <button class="btn" id="startBtn">Enter the maze</button>
     <div style="display:flex;gap:10px;margin-top:12px;">
@@ -243,6 +265,13 @@
       <div class="codeBox" id="partyCodeDisplay">-----</div>
       <div id="partyMembersList"></div>
       <div style="margin-top:14px;">
+        <div class="settingsLabel">map <span id="hostMapLabel" style="text-transform:none;"></span></div>
+        <div class="settingsRow" id="mapChoiceRow"></div>
+        <div class="settingsLabel">difficulty</div>
+        <div class="settingsRow" id="difficultyChoiceRow"></div>
+        <div class="hostOnlyNote" id="partySettingsNote"></div>
+      </div>
+      <div style="margin-top:6px;">
         <div style="font-size:11px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">invite by username</div>
         <div class="searchRow">
           <input class="authField" id="playerSearchInput" style="margin-bottom:0;" placeholder="search players...">
@@ -251,7 +280,7 @@
         <div id="playerSearchResults"></div>
       </div>
       <div style="color:var(--dim);font-size:10.5px;margin-top:14px;letter-spacing:1px;">
-        everyone here can start their own run for now &mdash; seeing each other move around the same maze together is coming next.
+        everyone who enters together plays the same maze, on the same map and difficulty the host picked.
       </div>
     </div>
     <div style="display:flex;gap:10px;">
@@ -300,6 +329,35 @@
   }
   let rng = Math.random;
   let mazeSeed = null;
+
+  // ---------------- map / gamemode selection ----------------
+  const MAPS = [{id:"dungeon", label:"Dungeon"}, {id:"forest", label:"Forest"}];
+  const DIFFICULTIES = [{id:"easy", label:"Easy"}, {id:"normal", label:"Normal"}, {id:"hard", label:"Hard"}];
+  const DIFFICULTY_MONSTER_COUNT = {easy:1, normal:3, hard:10};
+  const DIFFICULTY_LABEL = {easy:"Easy", normal:"Normal", hard:"Hard"};
+  let mapTheme = "dungeon";        // active selection for solo play; synced from the party for party play
+  let gameDifficulty = "normal";
+  let partySettings = {map:"dungeon", difficulty:"normal"}; // what the party lobby currently has selected
+  let pendingMap = null, pendingDifficulty = null;          // received alongside pendingSeed when a teammate starts first
+
+  function makeChoiceButtons(container, options, getCurrent, onPick, disabled){
+    if(!container) return;
+    container.innerHTML = "";
+    options.forEach(opt=>{
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "miniBtn choiceBtn" + (getCurrent()===opt.id ? " active" : "");
+      b.textContent = opt.label;
+      if(disabled){ b.disabled = true; }
+      else { b.addEventListener("click", ()=>onPick(opt.id)); }
+      container.appendChild(b);
+    });
+  }
+  function renderSoloSettingsUI(){
+    makeChoiceButtons(document.getElementById("soloMapRow"), MAPS, ()=>mapTheme, id=>{ mapTheme=id; renderSoloSettingsUI(); }, false);
+    makeChoiceButtons(document.getElementById("soloDifficultyRow"), DIFFICULTIES, ()=>gameDifficulty, id=>{ gameDifficulty=id; renderSoloSettingsUI(); }, false);
+  }
+  renderSoloSettingsUI();
 
   // ================================================================
   // ACCOUNTS + LEVELING + PARTY SYSTEM (Supabase)
@@ -474,18 +532,50 @@
 
   function subscribeToParty(partyId){
     if(partyMembersChannel) sb.removeChannel(partyMembersChannel);
-    pendingSeed = null;
+    pendingSeed = null; pendingMap = null; pendingDifficulty = null;
     partyMembersChannel = sb.channel("party-members-"+partyId)
-      .on("postgres_changes", {event:"*", schema:"public", table:"party_members", filter:"party_id=eq."+partyId}, refreshPartyMembers)
-      // whoever enters the maze first shares the seed so everyone builds the same layout
+      .on("postgres_changes", {event:"*", schema:"public", table:"party_members", filter:"party_id=eq."+partyId}, ()=>{
+        refreshPartyMembers();
+        // resend current settings so anyone who just joined gets synced
+        if(currentParty && currentProfile && currentParty.host_id===currentProfile.id) broadcastPartySettings();
+      })
+      // host changed the map or gamemode
+      .on("broadcast", {event:"settings"}, msg=>{
+        partySettings = msg.payload;
+        renderPartySettingsUI();
+      })
+      // whoever enters the maze first shares the seed (and the settings they started with) so everyone matches
       .on("broadcast", {event:"game-start"}, msg=>{
-        if(pendingSeed===null) pendingSeed = msg.payload.seed;
+        if(pendingSeed===null){
+          pendingSeed = msg.payload.seed;
+          pendingMap = msg.payload.map;
+          pendingDifficulty = msg.payload.difficulty;
+        }
       })
       // live position updates from teammates already in the maze
       .on("broadcast", {event:"pos"}, msg=>{ handleRemotePos(msg.payload); })
       // a teammate died / escaped / went back to menu
       .on("broadcast", {event:"leave"}, msg=>{ handleRemoteLeave(msg.payload.userId); })
       .subscribe();
+  }
+
+  function broadcastPartySettings(){
+    if(!currentParty || !partyMembersChannel || !currentProfile) return;
+    if(currentParty.host_id !== currentProfile.id) return;
+    partyMembersChannel.send({type:"broadcast", event:"settings", payload:partySettings});
+  }
+  function renderPartySettingsUI(){
+    const isHost = !!(currentParty && currentProfile && currentParty.host_id===currentProfile.id);
+    document.getElementById("hostMapLabel").textContent = isHost ? "" : "(set by host)";
+    document.getElementById("partySettingsNote").textContent = isHost
+      ? "everyone in the party will play this map & difficulty when you start the run."
+      : "only the host can change these.";
+    makeChoiceButtons(document.getElementById("mapChoiceRow"), MAPS, ()=>partySettings.map, id=>{
+      partySettings.map = id; broadcastPartySettings(); renderPartySettingsUI();
+    }, !isHost);
+    makeChoiceButtons(document.getElementById("difficultyChoiceRow"), DIFFICULTIES, ()=>partySettings.difficulty, id=>{
+      partySettings.difficulty = id; broadcastPartySettings(); renderPartySettingsUI();
+    }, !isHost);
   }
 
   function handleRemotePos(p){
@@ -543,6 +633,7 @@
     document.getElementById("playerSearchInput").value = "";
     await refreshPartyMembers();
     subscribeToParty(currentParty.id);
+    renderPartySettingsUI();
   }
 
   document.getElementById("createPartyBtn").addEventListener("click", async ()=>{
@@ -551,6 +642,7 @@
     const { data, error } = await sb.from("parties").insert({code, host_id: currentProfile.id}).select().single();
     if(error){ alert("Couldn't create a party: " + error.message); return; }
     currentParty = data;
+    partySettings = {map:"dungeon", difficulty:"normal"};
     await sb.from("party_members").insert({party_id: currentParty.id, user_id: currentProfile.id});
     openPartyOverlay();
   });
@@ -775,6 +867,40 @@
   const wallTex = makeWallTexture();
   const floorTex = makeFloorTexture();
 
+  function makeBarkTexture(){
+    const c=document.createElement("canvas"); c.width=128;c.height=128;
+    const g=c.getContext("2d");
+    g.fillStyle="#241a10"; g.fillRect(0,0,128,128);
+    g.strokeStyle="rgba(0,0,0,0.45)"; g.lineWidth=2;
+    for(let x=0;x<128;x+=9){
+      g.beginPath();
+      g.moveTo(x, 0);
+      for(let y=0;y<=128;y+=16) g.lineTo(x+Math.sin(y*0.2+x)*3, y);
+      g.stroke();
+    }
+    for(let i=0;i<250;i++){
+      g.fillStyle = "rgba("+(45+Math.random()*30|0)+","+(30+Math.random()*20|0)+","+(12+Math.random()*10|0)+",0.5)";
+      g.fillRect(Math.random()*128, Math.random()*128, 2, 5);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+  function makeForestFloorTexture(){
+    const c=document.createElement("canvas"); c.width=128;c.height=128;
+    const g=c.getContext("2d");
+    g.fillStyle="#0c1408"; g.fillRect(0,0,128,128);
+    for(let i=0;i<500;i++){
+      g.fillStyle = "rgba("+(10+Math.random()*22|0)+","+(22+Math.random()*30|0)+","+(8+Math.random()*15|0)+",0.6)";
+      g.fillRect(Math.random()*128, Math.random()*128, 3, 3);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+  const barkTex = makeBarkTexture();
+  const forestFloorTex = makeForestFloorTexture();
+
   // ---------------- lighting ----------------
   const ambient = new THREE.AmbientLight(0x191018, 0.55);
   scene.add(ambient);
@@ -789,41 +915,88 @@
   scene.add(flashlight.target);
 
   // ---------------- maze geometry ----------------
-  let mazeGroup, wallInstMesh, floorMesh, gateMesh, switchMesh, switchLight;
+  let mazeGroup, wallInstMesh, foliageInstMesh, floorMesh, gateMesh, switchMesh, switchLight;
   let polaroidMeshes = [];
 
-  function buildMazeGeometry(){
+  function buildMazeGeometry(theme){
     mazeGroup = new THREE.Group();
+    const isForest = theme === "forest";
 
     // floor
     const floorGeo = new THREE.PlaneGeometry(COLS*TILE, ROWS*TILE);
-    floorTex.repeat.set(COLS, ROWS);
-    const floorMat = new THREE.MeshStandardMaterial({map:floorTex, roughness:0.95});
+    const fTex = isForest ? forestFloorTex : floorTex;
+    fTex.repeat.set(COLS, ROWS);
+    const floorMat = new THREE.MeshStandardMaterial({map:fTex, roughness:0.95});
     floorMesh = new THREE.Mesh(floorGeo, floorMat);
     floorMesh.rotation.x = -Math.PI/2;
     floorMesh.position.set(COLS*TILE/2, 0, ROWS*TILE/2);
     floorMesh.receiveShadow = true;
     mazeGroup.add(floorMesh);
 
-    // walls (instanced)
+    // walls (instanced) — dungeon uses solid brick blocks, forest uses tree trunks + canopy
     const wallCells = [];
     for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(grid[y][x]===1) wallCells.push({x,y});
-    const wallH = 4.5;
-    const wallGeo = new THREE.BoxGeometry(TILE, wallH, TILE);
-    wallTex.repeat.set(1,1);
-    const wallMat = new THREE.MeshStandardMaterial({map:wallTex, roughness:0.9});
-    wallInstMesh = new THREE.InstancedMesh(wallGeo, wallMat, wallCells.length);
-    wallInstMesh.castShadow = true;
-    wallInstMesh.receiveShadow = true;
-    const m = new THREE.Matrix4();
-    wallCells.forEach((cell,i)=>{
-      m.makeTranslation(worldX(cell.x), wallH/2, worldZ(cell.y));
-      wallInstMesh.setMatrixAt(i,m);
-    });
-    wallInstMesh.instanceMatrix.needsUpdate = true;
-    mazeGroup.add(wallInstMesh);
+    foliageInstMesh = null;
+
+    if(isForest){
+      const trunkH = 5.4, trunkR = 0.5;
+      const trunkGeo = new THREE.CylinderGeometry(trunkR*0.65, trunkR, trunkH, 7);
+      const trunkMat = new THREE.MeshStandardMaterial({map:barkTex, roughness:0.95});
+      wallInstMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, wallCells.length);
+      wallInstMesh.castShadow = true;
+      wallInstMesh.receiveShadow = true;
+
+      const foliageGeo = new THREE.ConeGeometry(2.0, 3.2, 7);
+      const foliageMat = new THREE.MeshStandardMaterial({color:0x18321a, roughness:1});
+      foliageInstMesh = new THREE.InstancedMesh(foliageGeo, foliageMat, wallCells.length);
+      foliageInstMesh.castShadow = true;
+
+      const m = new THREE.Matrix4();
+      wallCells.forEach((cell,i)=>{
+        m.makeTranslation(worldX(cell.x), trunkH/2, worldZ(cell.y));
+        wallInstMesh.setMatrixAt(i,m);
+        m.makeTranslation(worldX(cell.x), trunkH + 0.95, worldZ(cell.y));
+        foliageInstMesh.setMatrixAt(i,m);
+      });
+      wallInstMesh.instanceMatrix.needsUpdate = true;
+      foliageInstMesh.instanceMatrix.needsUpdate = true;
+      mazeGroup.add(wallInstMesh);
+      mazeGroup.add(foliageInstMesh);
+    } else {
+      const wallH = 4.5;
+      const wallGeo = new THREE.BoxGeometry(TILE, wallH, TILE);
+      wallTex.repeat.set(1,1);
+      const wallMat = new THREE.MeshStandardMaterial({map:wallTex, roughness:0.9});
+      wallInstMesh = new THREE.InstancedMesh(wallGeo, wallMat, wallCells.length);
+      wallInstMesh.castShadow = true;
+      wallInstMesh.receiveShadow = true;
+      const m = new THREE.Matrix4();
+      wallCells.forEach((cell,i)=>{
+        m.makeTranslation(worldX(cell.x), wallH/2, worldZ(cell.y));
+        wallInstMesh.setMatrixAt(i,m);
+      });
+      wallInstMesh.instanceMatrix.needsUpdate = true;
+      mazeGroup.add(wallInstMesh);
+    }
 
     scene.add(mazeGroup);
+  }
+
+  // fog / ambient / moonlight tint per map theme
+  function applyThemeAtmosphere(theme){
+    if(theme==="forest"){
+      scene.background.set(0x040f08);
+      scene.fog.color.set(0x040f08);
+      scene.fog.density = 0.042;
+      ambient.color.set(0x223318); ambient.intensity = 0.5;
+      moon.color.set(0x8fae6a); moon.intensity = 0.22;
+    } else {
+      scene.background.set(0x030202);
+      scene.fog.color.set(0x030202);
+      scene.fog.density = 0.05;
+      ambient.color.set(0x191018); ambient.intensity = 0.55;
+      moon.color.set(0x2a3550); moon.intensity = 0.18;
+    }
   }
 
   function makePhotoTexture(){
@@ -953,17 +1126,17 @@
   }
 
   // ---------------- monster: a big billboarded picture of a face ----------------
-  let monsterFaceMat, monsterGlow;
-  function buildMonster(){
+  // Multiple copies of Nard can be spawned (easy=1, normal=3, hard=10). They all share the
+  // same face material/texture — only their transforms differ — so this stays cheap even at 10.
+  let monsterFaceMat;
+  let monsterAspect = 1; // updated once the real image loads; used to size any monster built after that
+  function buildMonsterInstance(){
     const root = new THREE.Group();
-
-    // placeholder aspect ratio until the real image loads and we resize this
-    const placeholderGeo = new THREE.PlaneGeometry(1.7, 2.4);
-    monsterFaceMat = new THREE.MeshBasicMaterial({color:0x220000, transparent:true, side:THREE.DoubleSide, depthWrite:false});
-    const face = new THREE.Mesh(placeholderGeo, monsterFaceMat);
-    face.position.y = 1.5;
+    const h = 2.7, w = h*monsterAspect; // big — meant to loom
+    const faceGeo = new THREE.PlaneGeometry(w,h);
+    const face = new THREE.Mesh(faceGeo, monsterFaceMat);
+    face.position.y = h/2 + 0.05;
     root.add(face);
-    root.userData.face = face;
 
     // dark contact shadow so it doesn't look like it's floating
     const blobGeo = new THREE.CircleGeometry(0.55,16);
@@ -973,14 +1146,13 @@
     blob.position.y = 0.02;
     root.add(blob);
 
-    monsterGlow = new THREE.PointLight(0xff2020, 0, 7);
-    monsterGlow.position.y = 1.7;
-    root.add(monsterGlow);
+    const glow = new THREE.PointLight(0xff2020, 0, 7);
+    glow.position.y = h*0.65;
+    root.add(glow);
 
-    return root;
+    return {root, face, glow};
   }
-  const monster3D = buildMonster();
-  scene.add(monster3D);
+  monsterFaceMat = new THREE.MeshBasicMaterial({color:0x220000, transparent:true, side:THREE.DoubleSide, depthWrite:false});
 
   // load the face texture — with a safe fallback if the host blocks CORS — and size the
   // plane to the image's real aspect ratio so it reads as a big picture, not a stretched blob
@@ -996,13 +1168,15 @@
     g.beginPath(); g.moveTo(30,95); for(let x=30;x<=98;x+=8){ g.lineTo(x, 95 + (((x/8)|0)%2?10:0)); } g.stroke();
     return new THREE.CanvasTexture(c);
   }
-  function resizeMonsterFace(aspect){
-    const h = 2.7, w = h*aspect; // big — meant to loom
-    const face = monster3D.userData.face;
-    face.geometry.dispose();
-    face.geometry = new THREE.PlaneGeometry(w,h);
-    face.position.y = h/2 + 0.05;
-    monsterGlow.position.y = h*0.65;
+  function applyMonsterAspect(aspect){
+    monsterAspect = aspect;
+    const h = 2.7, w = h*aspect;
+    monsters.forEach(m=>{
+      m.face.geometry.dispose();
+      m.face.geometry = new THREE.PlaneGeometry(w,h);
+      m.face.position.y = h/2 + 0.05;
+      m.glow.position.y = h*0.65;
+    });
   }
   function loadMonsterTexture(){
     const img = new Image();
@@ -1013,7 +1187,7 @@
       monsterFaceMat.map = proceduralFaceTexture();
       monsterFaceMat.color.set(0xffffff);
       monsterFaceMat.needsUpdate = true;
-      resizeMonsterFace(1);
+      applyMonsterAspect(1);
     };
     img.onload = ()=>{
       if(settled) return; settled = true;
@@ -1024,7 +1198,7 @@
         monsterFaceMat.color.set(0xffffff);
         monsterFaceMat.needsUpdate = true;
         const aspect = (img.naturalWidth && img.naturalHeight) ? img.naturalWidth/img.naturalHeight : 1;
-        resizeMonsterFace(aspect);
+        applyMonsterAspect(aspect);
       }catch(e){ fallback(); }
     };
     img.onerror = fallback;
@@ -1035,14 +1209,17 @@
 
   // ---------------- game state ----------------
   let state="menu";
-  let player = {x:0,z:0,cx:1,cy:1,angle:0,speed:6.2};
-  let monster = {x:0,z:0,cx:1,cy:1,state:"wander",path:[],pathTimer:0,speed:3.2,bob:0};
-  let prevMonsterState = "wander";
+  let player = {
+    x:0,z:0,cx:1,cy:1,angle:0,
+    speed:6.2, sprintMultiplier:1.7,
+    stamina:100, maxStamina:100, staminaDrain:32, staminaRegen:18
+  };
+  let monsters = []; // each: {x,z,cx,cy,state,prevState,path,pathTimer,speed,bob,mesh,face,glow}
   let polaroidsData=[], gateSwitchData=null, exitCell=null;
   let flashlightOn=false, switchActivated=false;
   let facing={x:0,z:1};
   let keys={};
-  let walkPhase=0, msgTimer=0, lastTime=0;
+  let walkPhase=0, bobPhase=0, bobY=0, bobX=0, msgTimer=0, lastTime=0;
 
 
   function collected(){ return polaroidsData.filter(p=>p.collected).length; }
@@ -1051,6 +1228,15 @@
     document.getElementById("obj-collect").classList.toggle("done", collected()===5);
     document.getElementById("obj-switch").classList.toggle("done", switchActivated);
     document.getElementById("flash-status").textContent = "flashlight: " + (flashlightOn?"ON":"OFF") + " — press F to toggle";
+    const count = DIFFICULTY_MONSTER_COUNT[gameDifficulty] || 1;
+    document.getElementById("obj-difficulty").textContent = "Difficulty: " + (DIFFICULTY_LABEL[gameDifficulty]||"Normal") + " (" + count + (count===1?" hunter)":" hunters)");
+  }
+  function updateStaminaBar(){
+    const bar = document.getElementById("staminaBar");
+    if(!bar) return;
+    const pct = Math.max(0, Math.min(100, (player.stamina/player.maxStamina)*100));
+    bar.style.width = pct + "%";
+    bar.classList.toggle("low", pct < 25);
   }
   function showMsg(txt){
     const el = document.getElementById("msgline");
@@ -1173,16 +1359,17 @@
     ctx.moveTo(0,-6); ctx.lineTo(4,5); ctx.lineTo(-4,5); ctx.closePath();
     ctx.fill();
     ctx.restore();
-    // only reveals the monster when it's actively hunting you — that's the point
-    if(monster.state==="chase"){
-      const mdx = (monster.x-player.x)/TILE, mdz = (monster.z-player.z)/TILE;
+    // only reveals a monster when it's actively hunting you — that's the point
+    monsters.forEach(m=>{
+      if(m.state!=="chase") return;
+      const mdx = (m.x-player.x)/TILE, mdz = (m.z-player.z)/TILE;
       if(Math.abs(mdx)<=radiusTiles && Math.abs(mdz)<=radiusTiles){
         ctx.fillStyle = "#ff2020";
         ctx.beginPath();
         ctx.arc(size/2+mdx*cellPx, size/2+mdz*cellPx, 4, 0, Math.PI*2);
         ctx.fill();
       }
-    }
+    });
     // teammates — always visible on the minimap, unlike the monster
     Object.values(otherPlayers).forEach(op=>{
       const tdx = (op.x-player.x)/TILE, tdz = (op.z-player.z)/TILE;
@@ -1215,18 +1402,30 @@
     exitCell = ec;
     grid[ec.y][ec.x] = 2;
 
-    const mc = randFloorCell(start,12);
-    monster.x = worldX(mc.x); monster.z = worldZ(mc.y);
-    monster.cx = mc.x; monster.cy = mc.y;
-    monster.state = "wander"; monster.path = []; monster.pathTimer = 0;
-    prevMonsterState = "wander";
+    // spawn the pack of hunters — count comes from the chosen difficulty
+    monsters.forEach(m=>scene.remove(m.root||m.mesh));
+    monsters = [];
+    const monsterCount = DIFFICULTY_MONSTER_COUNT[gameDifficulty] || 3;
+    for(let i=0;i<monsterCount;i++){
+      const mc = randFloorCell(start,12);
+      const inst = buildMonsterInstance();
+      const m = {
+        x:worldX(mc.x), z:worldZ(mc.y), cx:mc.x, cy:mc.y,
+        state:"wander", prevState:"wander", path:[], pathTimer:rng()*1.5,
+        speed:2.6, bob:rng()*10,
+        mesh:inst.root, face:inst.face, glow:inst.glow
+      };
+      scene.add(m.mesh);
+      monsters.push(m);
+    }
 
     // rebuild scene geometry
     if(mazeGroup) scene.remove(mazeGroup);
     if(switchMesh) scene.remove(switchMesh);
     if(gateMesh) scene.remove(gateMesh);
     polaroidMeshes.forEach(p=>{ scene.remove(p.mesh); scene.remove(p.light); });
-    buildMazeGeometry();
+    applyThemeAtmosphere(mapTheme);
+    buildMazeGeometry(mapTheme);
     placeEntities();
     buildPolaroids(polaroidsData);
 
@@ -1234,7 +1433,10 @@
     gateMesh.position.set(worldX(exitCell.x), 2.25, worldZ(exitCell.y));
 
     flashlightOn = false;
+    player.stamina = player.maxStamina;
+    bobPhase = 0; bobY = 0; bobX = 0;
     updateHud();
+    updateStaminaBar();
 
     fullMapBase = null;
     showFullMap = false;
@@ -1357,11 +1559,17 @@
     o.start(t); o.stop(t+0.26);
   }
   function scheduleHeartbeat(){
-    const chasing = state==="playing" && monster.state==="chase";
+    const chasing = state==="playing" && monsters.some(m=>m.state==="chase");
     const interval = chasing ? 480 : 1400;
     heartbeatTimer = setTimeout(()=>{
       if(state==="playing"){
-        const dist = Math.hypot(monster.x-player.x, monster.z-player.z);
+        let dist = Infinity;
+        monsters.forEach(m=>{
+          if(m.state==="chase"){
+            const d = Math.hypot(m.x-player.x, m.z-player.z);
+            if(d<dist) dist = d;
+          }
+        });
         const vol = chasing ? Math.min(0.34, Math.max(0.08, 0.34 - dist*0.012)) : 0.05;
         heartbeatThump(vol);
         setTimeout(()=>heartbeatThump(vol*0.65), 150);
@@ -1428,15 +1636,30 @@
     if(keys["a"]||keys["arrowleft"]) { mx -= rightX; mz -= rightZ; }
 
     const moving = mx!==0||mz!==0;
+    const wantSprint = !!keys["shift"] && moving && player.stamina > 0.001;
+    const curSpeed = player.speed * (wantSprint ? player.sprintMultiplier : 1);
     if(moving){
       const len=Math.hypot(mx,mz); mx/=len; mz/=len;
       facing = {x:mx, z:mz};
-      const nx = player.x + mx*player.speed*dt;
-      const nz = player.z + mz*player.speed*dt;
+      const nx = player.x + mx*curSpeed*dt;
+      const nz = player.z + mz*curSpeed*dt;
       if(canMoveTo(nx, player.z, 0.35)) player.x = nx;
       if(canMoveTo(player.x, nz, 0.35)) player.z = nz;
-      walkPhase += dt*10;
+      walkPhase += dt*(wantSprint?14:10);
+      bobPhase += dt*(wantSprint?16:10.5);
     }
+    // stamina drains while actively sprinting, regenerates otherwise
+    if(wantSprint) player.stamina = Math.max(0, player.stamina - player.staminaDrain*dt);
+    else player.stamina = Math.min(player.maxStamina, player.stamina + player.staminaRegen*dt);
+    updateStaminaBar();
+
+    // head bob — smoothly eases toward a moving target so it doesn't snap when you stop
+    const targetBobY = moving ? Math.abs(Math.sin(bobPhase)) * (wantSprint?0.11:0.06) : 0;
+    const targetBobX = moving ? Math.sin(bobPhase*0.5) * (wantSprint?0.05:0.03) : 0;
+    const bobLerp = Math.min(1, dt*10);
+    bobY += (targetBobY - bobY) * bobLerp;
+    bobX += (targetBobX - bobX) * bobLerp;
+
     player.cx = Math.floor(player.x/TILE);
     player.cy = Math.floor(player.z/TILE);
     player.angle = yaw;
@@ -1469,47 +1692,52 @@
     }
     if(msgTimer>0){ msgTimer-=dt; if(msgTimer<=0) document.getElementById("msgline").style.opacity=0; }
 
-    // monster AI
-    monster.bob += dt*4;
-    monster.cx = Math.floor(monster.x/TILE); monster.cy = Math.floor(monster.z/TILE);
-    const distToPlayer = Math.hypot(monster.x-player.x, monster.z-player.z);
+    // monster AI — every hunter in the pack runs its own wander/chase state independently
     const detectRadius = flashlightOn ? 15 : 9;
-    const canSee = distToPlayer < detectRadius;
-    if(canSee) monster.state="chase"; else if(monster.state==="chase" && distToPlayer>detectRadius*1.6) monster.state="wander";
-    if(monster.state==="chase" && prevMonsterState!=="chase") growlSfx();
-    prevMonsterState = monster.state;
+    let caught = false;
+    monsters.forEach(m=>{
+      m.bob += dt*4;
+      m.cx = Math.floor(m.x/TILE); m.cy = Math.floor(m.z/TILE);
+      const distToPlayer = Math.hypot(m.x-player.x, m.z-player.z);
+      const canSee = distToPlayer < detectRadius;
+      if(canSee) m.state="chase"; else if(m.state==="chase" && distToPlayer>detectRadius*1.6) m.state="wander";
+      if(m.state==="chase" && m.prevState!=="chase") growlSfx();
+      m.prevState = m.state;
 
-    monster.pathTimer -= dt;
-    if(monster.pathTimer<=0){
-      monster.pathTimer = monster.state==="chase" ? 0.4 : 1.5;
-      if(monster.state==="chase"){
-        monster.path = bfsPath(monster.cx,monster.cy, player.cx, player.cy);
-      } else {
-        const t = randFloorCell({x:monster.cx,y:monster.cy},3);
-        monster.path = bfsPath(monster.cx,monster.cy, t.x, t.y);
+      m.pathTimer -= dt;
+      if(m.pathTimer<=0){
+        m.pathTimer = m.state==="chase" ? 0.4 : 1.5;
+        if(m.state==="chase"){
+          m.path = bfsPath(m.cx,m.cy, player.cx, player.cy);
+        } else {
+          const t = randFloorCell({x:m.cx,y:m.cy},3);
+          m.path = bfsPath(m.cx,m.cy, t.x, t.y);
+        }
       }
-    }
-    const spd = monster.state==="chase" ? 4.6 : 2.6;
-    if(monster.path && monster.path.length>0){
-      const target = monster.path[0];
-      const tx = worldX(target.x), tz = worldZ(target.y);
-      const mdx = tx-monster.x, mdz = tz-monster.z;
-      const mdist = Math.hypot(mdx,mdz);
-      if(mdist<0.15) monster.path.shift();
-      else { monster.x += (mdx/mdist)*spd*dt; monster.z += (mdz/mdist)*spd*dt; }
-    }
-    monsterGlow.intensity = monster.state==="chase" ? 1.6 : 0.35;
-    monsterGlow.color.set(monster.state==="chase" ? 0xff1010 : 0x551010);
+      const spd = m.state==="chase" ? 4.6 : 2.6;
+      if(m.path && m.path.length>0){
+        const target = m.path[0];
+        const tx = worldX(target.x), tz = worldZ(target.y);
+        const mdx = tx-m.x, mdz = tz-m.z;
+        const mdist = Math.hypot(mdx,mdz);
+        if(mdist<0.15) m.path.shift();
+        else { m.x += (mdx/mdist)*spd*dt; m.z += (mdz/mdist)*spd*dt; }
+      }
+      m.glow.intensity = m.state==="chase" ? 1.6 : 0.35;
+      m.glow.color.set(m.state==="chase" ? 0xff1010 : 0x551010);
 
-    if(distToPlayer < 0.85){ triggerJumpscare(); }
+      if(distToPlayer < 0.85) caught = true;
+
+      // per-monster visuals: position + gentle bob; face plane billboards to the camera
+      m.mesh.position.set(m.x, Math.sin(m.bob)*0.08, m.z);
+      m.face.quaternion.copy(camera.quaternion);
+    });
+
+    if(caught){ triggerJumpscare(); }
 
     // ---------- visuals ----------
     // player's own body isn't rendered in first-person view (you don't see yourself)
     player3D.visible = false;
-
-    // monster mesh — position + gentle bob; the face plane billboards to the camera every frame
-    monster3D.position.set(monster.x, Math.sin(monster.bob)*0.08, monster.z);
-    monster3D.userData.face.quaternion.copy(camera.quaternion);
 
     // polaroids bob/spin
     polaroidMeshes.forEach((p,i)=>{
@@ -1538,15 +1766,17 @@
 
     // ---------- first-person camera: eyes at the player's head, rotated by mouse yaw/pitch ----------
     const eyeHeight = 1.6;
-    camera.position.set(player.x, eyeHeight, player.z);
+    const bobPosX = player.x + rightX*bobX;
+    const bobPosZ = player.z + rightZ*bobX;
+    camera.position.set(bobPosX, eyeHeight + bobY, bobPosZ);
     camera.rotation.order = "YXZ";
     camera.rotation.y = yaw;
     camera.rotation.x = pitch;
-    camera.rotation.z = 0;
+    camera.rotation.z = bobX*0.4; // subtle sway/roll to sell the footsteps
 
     // flashlight follows the camera exactly — points wherever you're actually looking
     flashlight.intensity = flashlightOn ? 3.2 : 0;
-    flashlight.position.set(player.x, eyeHeight, player.z);
+    flashlight.position.set(bobPosX, eyeHeight + bobY, bobPosZ);
     const lookDir = new THREE.Vector3();
     camera.getWorldDirection(lookDir);
     flashlight.target.position.set(player.x + lookDir.x*4, eyeHeight + lookDir.y*4, player.z + lookDir.z*4);
@@ -1609,15 +1839,21 @@
     setTimeout(()=>{
       if(currentParty){
         if(pendingSeed===null){
-          // nobody in the party has started yet — we generate the seed and share it
+          // nobody in the party has started yet — we generate the seed and share it,
+          // along with whatever map/difficulty the host currently has selected
           mazeSeed = ((Date.now() ^ Math.floor(Math.random()*0xffffffff)) >>> 0);
-          if(partyMembersChannel) partyMembersChannel.send({type:"broadcast", event:"game-start", payload:{seed:mazeSeed}});
+          mapTheme = partySettings.map;
+          gameDifficulty = partySettings.difficulty;
+          if(partyMembersChannel) partyMembersChannel.send({type:"broadcast", event:"game-start", payload:{seed:mazeSeed, map:mapTheme, difficulty:gameDifficulty}});
         } else {
           mazeSeed = pendingSeed;
+          mapTheme = pendingMap || "dungeon";
+          gameDifficulty = pendingDifficulty || "normal";
         }
-        pendingSeed = null;
+        pendingSeed = null; pendingMap = null; pendingDifficulty = null;
         rng = mulberry32(mazeSeed);
       } else {
+        // solo play uses whatever the player picked on the main menu
         mazeSeed = null;
         rng = Math.random;
       }
